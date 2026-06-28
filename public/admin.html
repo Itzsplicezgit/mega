@@ -1,92 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin Panel</title>
-
 <style>
-
-body{
-margin:0;
-background:#050505;
-color:#ddd;
-font-family:Arial;
-}
-
-header{
-padding:16px;
-background:#0d0d0d;
-border-bottom:1px solid #222;
-display:flex;
-justify-content:space-between;
-align-items:center;
-}
-
-h1{
-font-size:18px;
-color:#ccc;
-}
-
-button{
-background:#1a1a1a;
-border:1px solid #333;
-color:#ddd;
-padding:10px 12px;
-border-radius:12px;
-cursor:pointer;
-margin:4px;
-}
-
-button:hover{
-background:#262626;
-}
-
-.container{
-max-width:1000px;
-margin:auto;
-padding:20px;
-}
-
-input{
-width:100%;
-padding:10px;
-margin-top:10px;
-background:#050505;
-border:1px solid #333;
-color:#ddd;
-border-radius:10px;
-}
-
-.thread{
-background:#111;
-border:1px solid #2a2a2a;
-padding:12px;
-margin-bottom:10px;
-border-radius:10px;
-}
-
-.meta{
-font-size:12px;
-color:#888;
-}
-
-.actions{
-margin-top:10px;
-display:flex;
-flex-wrap:wrap;
-gap:6px;
-}
-
-.hidden{
-display:none;
-}
-
+body{margin:0;background:#050505;color:#ddd;font-family:Arial}
+header{padding:16px;background:#0d0d0d;border-bottom:1px solid #222;display:flex;justify-content:space-between;align-items:center}
+h1{font-size:18px;color:#ccc}
+button{background:#1a1a1a;border:1px solid #333;color:#ddd;padding:10px 12px;border-radius:12px;cursor:pointer;margin:4px}
+button:hover{background:#262626}
+.container{max-width:1000px;margin:auto;padding:20px}
+input,textarea{width:100%;padding:10px;margin-top:10px;background:#050505;border:1px solid #333;color:#ddd;border-radius:10px}
+.thread{background:#111;border:1px solid #2a2a2a;padding:12px;margin-bottom:10px;border-radius:10px}
+.meta{font-size:12px;color:#888}
+.actions{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
+.hidden{display:none}
+.file-btn{display:inline-block;margin-top:10px;padding:10px 14px;border:1px solid #333;border-radius:12px;background:#1a1a1a;cursor:pointer}
+input[type=file]{display:none}
 </style>
-
 </head>
-
 <body>
 
 <header>
@@ -97,16 +30,22 @@ display:none;
 <div class="container">
 
 <div id="loginBox">
-
 <h2>Login</h2>
-
 <input type="password" id="pass" placeholder="password">
-
 <button onclick="login()">Login</button>
-
 </div>
 
 <div id="panel" class="hidden">
+
+<h2>Create Thread</h2>
+<textarea id="newText"></textarea>
+
+<label class="file-btn">
+Attach Media
+<input type="file" id="newFile" accept="image/*,video/*">
+</label>
+
+<button onclick="createThread()">Post Thread</button>
 
 <button onclick="load()">Refresh</button>
 
@@ -121,28 +60,21 @@ display:none;
 let token = localStorage.getItem("adminToken");
 
 async function login(){
-
 let res = await fetch("/admin/login",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({password:pass.value})
 });
-
 let data = await res.json();
-
 if(data.token){
 token = data.token;
 localStorage.setItem("adminToken",token);
-
 loginBox.classList.add("hidden");
 panel.classList.remove("hidden");
-
 load();
-}
-else{
+}else{
 alert("failed");
 }
-
 }
 
 function logout(){
@@ -151,92 +83,75 @@ location.reload();
 }
 
 async function load(){
-
-let res = await fetch("/admin/threads",{
-headers:{
-"x-admin-token": token
-}
-});
-
-if(res.status === 403){
-alert("not logged in");
-return;
-}
-
+let res = await fetch("/admin/threads",{headers:{"x-admin-token":token}});
+if(res.status===403){alert("not logged in");return;}
 let data = await res.json();
-
 render(data);
 }
 
 function render(data){
-
 threads.innerHTML="";
-
 data.forEach(t=>{
-
-let div = document.createElement("div");
+let div=document.createElement("div");
 div.className="thread";
-
-div.innerHTML = `
-
-<div class="meta">
-ID: ${t.id}<br>
-Anonymous • ${new Date(t.time).toLocaleTimeString()}
-</div>
-
+div.innerHTML=`
+<div class="meta">ID: ${t.id}<br>Anonymous • ${new Date(t.time).toLocaleTimeString()}</div>
 <p>${escape(t.text)}</p>
-
 <div class="actions">
-
 <button onclick="del('${t.id}')">Delete</button>
 <button onclick="pin('${t.id}')">Pin Top</button>
 <button onclick="bottom('${t.id}')">Move Bottom</button>
-
 </div>
-
 `;
-
 threads.appendChild(div);
+});
+}
 
+async function createThread(){
+let fd=new FormData();
+fd.append("text",newText.value);
+let file=newFile.files[0];
+if(file)fd.append("media",file);
+
+await fetch("/admin/thread",{
+method:"POST",
+headers:{"x-admin-token":token},
+body:fd
 });
 
+newText.value="";
+newFile.value="";
+load();
 }
 
 async function del(id){
-
 await fetch(`/admin/thread/${id}`,{
 method:"DELETE",
 headers:{"x-admin-token":token}
 });
-
 load();
 }
 
 async function pin(id){
-
 await fetch(`/admin/thread/${id}/pin`,{
 method:"POST",
 headers:{"x-admin-token":token}
 });
-
 load();
 }
 
 async function bottom(id){
-
 await fetch(`/admin/thread/${id}/bottom`,{
 method:"POST",
 headers:{"x-admin-token":token}
 });
-
 load();
 }
 
 function escape(x){
-return x ? x.replaceAll("&","&amp;").replaceAll("<","&lt;") : "";
+return x?x.replaceAll("&","&amp;").replaceAll("<","&lt;"):"";
 }
 
-/* auto restore session */
 if(token){
 loginBox.classList.add("hidden");
 panel.classList.remove("hidden");
