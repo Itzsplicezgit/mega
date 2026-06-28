@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin Panel</title>
+
 <style>
 body{margin:0;background:#050505;color:#ddd;font-family:Arial}
 header{padding:16px;background:#0d0d0d;border-bottom:1px solid #222;display:flex;justify-content:space-between;align-items:center}
@@ -11,15 +12,17 @@ h1{font-size:18px;color:#ccc}
 button{background:#1a1a1a;border:1px solid #333;color:#ddd;padding:10px 12px;border-radius:12px;cursor:pointer;margin:4px}
 button:hover{background:#262626}
 .container{max-width:1000px;margin:auto;padding:20px}
-input,textarea{width:100%;padding:10px;margin-top:10px;background:#050505;border:1px solid #333;color:#ddd;border-radius:10px}
+textarea,input{width:100%;padding:10px;margin-top:10px;background:#050505;border:1px solid #333;color:#ddd;border-radius:10px}
 .thread{background:#111;border:1px solid #2a2a2a;padding:12px;margin-bottom:10px;border-radius:10px}
 .meta{font-size:12px;color:#888}
 .actions{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
 .hidden{display:none}
 .file-btn{display:inline-block;margin-top:10px;padding:10px 14px;border:1px solid #333;border-radius:12px;background:#1a1a1a;cursor:pointer}
 input[type=file]{display:none}
+.small{font-size:12px;color:#888;margin-top:6px}
 </style>
 </head>
+
 <body>
 
 <header>
@@ -38,12 +41,15 @@ input[type=file]{display:none}
 <div id="panel" class="hidden">
 
 <h2>Create Thread</h2>
+
 <textarea id="newText"></textarea>
 
 <label class="file-btn">
 Attach Media
-<input type="file" id="newFile" accept="image/*,video/*">
+<input type="file" id="newFile" accept="image/*,video/*" onchange="showFileName()">
 </label>
+
+<div id="fileStatus" class="small"></div>
 
 <button onclick="createThread()">Post Thread</button>
 
@@ -57,43 +63,46 @@ Attach Media
 
 <script>
 
-let token = localStorage.getItem("adminToken");
+let token=localStorage.getItem("adminToken")
 
 async function login(){
-let res = await fetch("/admin/login",{
+let res=await fetch("/admin/login",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({password:pass.value})
-});
-let data = await res.json();
+})
+
+let data=await res.json()
+
 if(data.token){
-token = data.token;
-localStorage.setItem("adminToken",token);
-loginBox.classList.add("hidden");
-panel.classList.remove("hidden");
-load();
+token=data.token
+localStorage.setItem("adminToken",token)
+loginBox.classList.add("hidden")
+panel.classList.remove("hidden")
+load()
 }else{
-alert("failed");
+alert("failed")
 }
 }
 
 function logout(){
-localStorage.removeItem("adminToken");
-location.reload();
+localStorage.removeItem("adminToken")
+location.reload()
 }
 
 async function load(){
-let res = await fetch("/admin/threads",{headers:{"x-admin-token":token}});
-if(res.status===403){alert("not logged in");return;}
-let data = await res.json();
-render(data);
+let res=await fetch("/admin/threads",{headers:{"x-admin-token":token}})
+if(res.status===403){alert("not logged in");return}
+let data=await res.json()
+render(data)
 }
 
 function render(data){
-threads.innerHTML="";
+threads.innerHTML=""
 data.forEach(t=>{
-let div=document.createElement("div");
-div.className="thread";
+let div=document.createElement("div")
+div.className="thread"
+
 div.innerHTML=`
 <div class="meta">ID: ${t.id}<br>Anonymous • ${new Date(t.time).toLocaleTimeString()}</div>
 <p>${escape(t.text)}</p>
@@ -102,60 +111,72 @@ div.innerHTML=`
 <button onclick="pin('${t.id}')">Pin Top</button>
 <button onclick="bottom('${t.id}')">Move Bottom</button>
 </div>
-`;
-threads.appendChild(div);
-});
+`
+
+threads.appendChild(div)
+})
 }
 
 async function createThread(){
-let fd=new FormData();
-fd.append("text",newText.value);
-let file=newFile.files[0];
-if(file)fd.append("media",file);
+let fd=new FormData()
+fd.append("text",newText.value)
+
+let file=newFile.files[0]
+if(file)fd.append("media",file)
 
 await fetch("/admin/thread",{
 method:"POST",
 headers:{"x-admin-token":token},
 body:fd
-});
+})
 
-newText.value="";
-newFile.value="";
-load();
+newText.value=""
+newFile.value=""
+document.getElementById("fileStatus").innerText=""
+load()
+}
+
+function showFileName(){
+let file=newFile.files[0]
+if(file){
+document.getElementById("fileStatus").innerText="Ready: "+file.name
+}else{
+document.getElementById("fileStatus").innerText=""
+}
 }
 
 async function del(id){
 await fetch(`/admin/thread/${id}`,{
 method:"DELETE",
 headers:{"x-admin-token":token}
-});
-load();
+})
+load()
 }
 
 async function pin(id){
 await fetch(`/admin/thread/${id}/pin`,{
 method:"POST",
 headers:{"x-admin-token":token}
-});
-load();
+})
+load()
 }
 
 async function bottom(id){
 await fetch(`/admin/thread/${id}/bottom`,{
 method:"POST",
 headers:{"x-admin-token":token}
-});
-load();
+})
+load()
 }
 
 function escape(x){
-return x?x.replaceAll("&","&amp;").replaceAll("<","&lt;"):"";
+return x?x.replaceAll("&","&amp;").replaceAll("<","&lt;"):""
 }
 
 if(token){
-loginBox.classList.add("hidden");
-panel.classList.remove("hidden");
-load();
+loginBox.classList.add("hidden")
+panel.classList.remove("hidden")
+load()
 }
 
 </script>
