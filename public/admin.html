@@ -20,6 +20,7 @@ textarea,input{width:100%;padding:10px;margin-top:10px;background:#050505;border
 .file-btn{display:inline-block;margin-top:10px;padding:10px 14px;border:1px solid #333;border-radius:12px;background:#1a1a1a;cursor:pointer}
 input[type=file]{display:none}
 .small{font-size:12px;color:#888;margin-top:6px}
+.error{color:#ff4d4d;font-size:13px;margin-top:8px}
 </style>
 </head>
 
@@ -50,9 +51,9 @@ Attach Media
 </label>
 
 <div id="fileStatus" class="small"></div>
+<div id="errorBox" class="error"></div>
 
 <button onclick="createThread()">Post Thread</button>
-
 <button onclick="load()">Refresh</button>
 
 <div id="threads"></div>
@@ -64,6 +65,10 @@ Attach Media
 <script>
 
 let token=localStorage.getItem("adminToken")
+
+function showError(msg){
+document.getElementById("errorBox").innerText=msg||""
+}
 
 async function login(){
 let res=await fetch("/admin/login",{
@@ -103,9 +108,19 @@ data.forEach(t=>{
 let div=document.createElement("div")
 div.className="thread"
 
+let media=""
+if(t.media){
+if(t.media.includes("mp4")){
+media=`<video src="${t.media}" style="max-width:200px;margin-top:10px"></video>`
+}else{
+media=`<img src="${t.media}" style="max-width:200px;margin-top:10px">`
+}
+}
+
 div.innerHTML=`
 <div class="meta">ID: ${t.id}<br>Anonymous • ${new Date(t.time).toLocaleTimeString()}</div>
 <p>${escape(t.text)}</p>
+${media}
 <div class="actions">
 <button onclick="del('${t.id}')">Delete</button>
 <button onclick="pin('${t.id}')">Pin Top</button>
@@ -118,22 +133,36 @@ threads.appendChild(div)
 }
 
 async function createThread(){
+showError("")
+
 let fd=new FormData()
 fd.append("text",newText.value)
 
 let file=newFile.files[0]
 if(file)fd.append("media",file)
 
-await fetch("/admin/thread",{
+try{
+let res=await fetch("/admin/thread",{
 method:"POST",
 headers:{"x-admin-token":token},
 body:fd
 })
 
+let data=await res.json()
+
+if(!res.ok){
+showError(data.error || "failed to post")
+return
+}
+
 newText.value=""
 newFile.value=""
 document.getElementById("fileStatus").innerText=""
 load()
+
+}catch(e){
+showError("network error")
+}
 }
 
 function showFileName(){
