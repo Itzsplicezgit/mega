@@ -10,7 +10,6 @@ app.use("/uploads", express.static("uploads"))
 
 let threads = []
 
-const postCooldown = {}
 const replyCooldown = {}
 const adminSessions = {}
 const adminFailCooldown = {}
@@ -27,7 +26,7 @@ cb(null,Date.now()+"-"+file.originalname)
 
 const upload = multer({
 storage,
-limits:{fileSize:100*1024*1024}
+limits:{fileSize:50*1024*1024}
 })
 
 function ip(req){
@@ -56,9 +55,9 @@ threads=threads.slice(0,MAX_THREADS)
 }
 }
 
-function trimReplies(thread){
-if(thread.replies.length>MAX_REPLIES){
-thread.replies=thread.replies.slice(-MAX_REPLIES)
+function trimReplies(t){
+if(t.replies.length>MAX_REPLIES){
+t.replies=t.replies.slice(-MAX_REPLIES)
 }
 }
 
