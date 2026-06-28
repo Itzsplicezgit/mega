@@ -26,7 +26,7 @@ cb(null,Date.now()+"-"+file.originalname)
 
 const upload = multer({
 storage,
-limits:{fileSize:50*1024*1024}
+limits:{fileSize:10*1024*1024}
 })
 
 function ip(req){
