@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anonymous Board</title>
+
+<style>
+
+body{
+margin:0;
+background:#050505;
+color:#ddd;
+font-family:Arial;
+}
+
+header{
+background:#0d0d0d;
+padding:16px;
+display:flex;
+justify-content:space-between;
+border-bottom:1px solid #222;
+}
+
+.logo{
+font-weight:bold;
+color:#ccc;
+}
+
+button{
+background:#1a1a1a;
+border:1px solid #333;
+color:#ddd;
+padding:10px 14px;
+border-radius:14px;
+cursor:pointer;
+}
+
+button:hover{
+background:#262626;
+}
+
+.container{
+max-width:900px;
+margin:auto;
+padding:20px;
+}
+
+.thread{
+background:#111;
+border:1px solid #2a2a2a;
+padding:14px;
+margin-bottom:10px;
+border-radius:10px;
+cursor:pointer;
+}
+
+.thread:hover{
+background:#151515;
+}
+
+.meta{
+font-size:12px;
+color:#888;
+}
+
+.media{
+max-width:320px;
+margin-top:10px;
+border-radius:10px;
+display:block;
+}
+
+.modal{
+display:none;
+position:fixed;
+inset:0;
+background:#000;
+overflow:auto;
+}
+
+.board{
+max-width:900px;
+margin:auto;
+padding:20px;
+}
+
+.post{
+background:#111;
+border:1px solid #2a2a2a;
+padding:14px;
+margin-bottom:10px;
+border-radius:10px;
+}
+
+textarea,input{
+width:100%;
+background:#050505;
+border:1px solid #333;
+color:#ddd;
+padding:10px;
+margin-top:10px;
+border-radius:10px;
+}
+
+.file-btn{
+display:inline-block;
+margin-top:10px;
+padding:10px 14px;
+border:1px solid #333;
+border-radius:14px;
+background:#1a1a1a;
+cursor:pointer;
+}
+
+input[type=file]{
+display:none;
+}
+
+.section{
+margin-top:20px;
+}
+
+</style>
+</head>
+
+<body>
+
+<header>
+<div class="logo">Anonymous Board</div>
+<button onclick="openCreate()">New Thread</button>
+</header>
+
+<div class="container">
+<h3>Threads</h3>
+<div id="threads"></div>
+</div>
+
+<!-- CREATE -->
+<div class="modal" id="createModal">
+<div class="board">
+
+<button onclick="closeCreate()">Back</button>
+
+<h2>Create Thread</h2>
+
+<textarea id="text"></textarea>
+
+<label class="file-btn">
+Attach Media
+<input type="file" id="file" accept="image/*,video/*">
+</label>
+
+<button onclick="createThread()">Post</button>
+
+</div>
+</div>
+
+<!-- VIEW -->
+<div class="modal" id="viewModal">
+<div class="board">
+
+<button onclick="closeView()">Back</button>
+
+<div id="threadView"></div>
+
+<div class="section">
+<h3>Replies</h3>
+
+<textarea id="replyText"></textarea>
+
+<label class="file-btn">
+Attach Image
+<input type="file" id="replyFile" accept="image/*,video/*">
+</label>
+
+<button onclick="sendReply()">Reply</button>
+
+<div id="replies"></div>
+</div>
+
+</div>
+</div>
+
+<script>
+
+let threads = [];
+let current = null;
+
+async function load(){
+let res = await fetch("/threads");
+threads = await res.json();
+render();
+}
+
+function render(){
+let box = document.getElementById("threads");
+box.innerHTML="";
+
+threads.forEach(t=>{
+
+let div = document.createElement("div");
+div.className="thread";
+div.onclick=()=>openThread(t);
+
+let media = "";
+
+if(t.media){
+if(t.media.endsWith(".mp4") || t.media.includes("video")){
+media = `<video class="media" controls src="${t.media}"></video>`;
+} else {
+media = `<img class="media" src="${t.media}">`;
+}
+}
+
+div.innerHTML = `
+<div class="meta">Anonymous • ${new Date(t.time).toLocaleTimeString()}</div>
+<p>${escape(t.text)}</p>
+${media}
+<div class="meta">${t.replies.length} replies</div>
+`;
+
+box.appendChild(div);
+
+});
+}
+
+function openCreate(){
+createModal.style.display="block";
+}
+
+function closeCreate(){
+createModal.style.display="none";
+}
+
+async function createThread(){
+
+let fd = new FormData();
+fd.append("text", text.value);
+
+let file = document.getElementById("file").files[0];
+if(file) fd.append("media", file);
+
+await fetch("/threads",{
+method:"POST",
+body:fd
+});
+
+text.value="";
+file.value="";
+
+closeCreate();
+load();
+}
+
+function openThread(t){
+current = t;
+viewModal.style.display="block";
+
+document.getElementById("threadView").innerHTML = `
+<div class="post">
+<div class="meta">Anonymous • ${new Date(t.time).toLocaleTimeString()}</div>
+<p>${escape(t.text)}</p>
+${
+t.media ?
+(t.media.includes("mp4")
+? `<video class="media" controls src="${t.media}"></video>`
+: `<img class="media" src="${t.media}">`)
+: ""
+}
+</div>
+`;
+
+renderReplies();
+}
+
+function closeView(){
+viewModal.style.display="none";
+}
+
+async function sendReply(){
+
+let fd = new FormData();
+fd.append("text", replyText.value);
+
+let file = replyFile.files[0];
+if(file) fd.append("media", file);
+
+await fetch(`/threads/${current.id}/reply`,{
+method:"POST",
+body:fd
+});
+
+replyText.value="";
+replyFile.value="";
+
+load();
+openThread(current);
+}
+
+function renderReplies(){
+
+replies.innerHTML="";
+
+current.replies.forEach(r=>{
+
+replies.innerHTML += `
+<div class="post">
+<div class="meta">Anonymous • ${new Date(r.time).toLocaleTimeString()}</div>
+<p>${escape(r.text)}</p>
+${
+r.media ?
+(r.media.includes("mp4")
+? `<video class="media" controls src="${r.media}"></video>`
+: `<img class="media" src="${r.media}">`)
+: ""
+}
+</div>
+`;
+
+});
+
+}
+
+function escape(x){
+return x ? x.replaceAll("&","&amp;").replaceAll("<","&lt;") : "";
+}
+
+load();
+
+</script>
+
+</body>
+</html>
