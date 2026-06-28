@@ -64,29 +64,29 @@ Attach Media
 
 <script>
 
-let token=localStorage.getItem("adminToken")
+let token = localStorage.getItem("adminToken")
 
 function showError(msg){
-document.getElementById("errorBox").innerText=msg||""
+document.getElementById("errorBox").innerText = msg || ""
 }
 
 async function login(){
-let res=await fetch("/admin/login",{
+let res = await fetch("/admin/login",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({password:pass.value})
 })
 
-let data=await res.json()
+let data = await res.json()
 
 if(data.token){
-token=data.token
+token = data.token
 localStorage.setItem("adminToken",token)
 loginBox.classList.add("hidden")
 panel.classList.remove("hidden")
 load()
 }else{
-alert("failed")
+alert("login failed")
 }
 }
 
@@ -96,24 +96,26 @@ location.reload()
 }
 
 async function load(){
-let res=await fetch("/admin/threads",{headers:{"x-admin-token":token}})
+let res = await fetch("/admin/threads",{headers:{"x-admin-token":token}})
 if(res.status===403){alert("not logged in");return}
-let data=await res.json()
+
+let data = await res.json()
 render(data)
 }
 
 function render(data){
 threads.innerHTML=""
+
 data.forEach(t=>{
-let div=document.createElement("div")
+let div = document.createElement("div")
 div.className="thread"
 
 let media=""
 if(t.media){
 if(t.media.includes("mp4")){
-media=`<video src="${t.media}" style="max-width:200px;margin-top:10px"></video>`
+media = `<video controls src="${t.media}" style="max-width:250px;margin-top:10px"></video>`
 }else{
-media=`<img src="${t.media}" style="max-width:200px;margin-top:10px">`
+media = `<img src="${t.media}" style="max-width:250px;margin-top:10px">`
 }
 }
 
@@ -135,23 +137,30 @@ threads.appendChild(div)
 async function createThread(){
 showError("")
 
-let fd=new FormData()
+let fd = new FormData()
 fd.append("text",newText.value)
 
-let file=newFile.files[0]
-if(file)fd.append("media",file)
+let file = newFile.files[0]
+if(file) fd.append("media",file)
 
 try{
-let res=await fetch("/admin/thread",{
+let res = await fetch("/admin/thread",{
 method:"POST",
 headers:{"x-admin-token":token},
 body:fd
 })
 
-let data=await res.json()
+let text = await res.text()
+let data
+
+try{
+data = JSON.parse(text)
+}catch(e){
+throw new Error(text || "server error")
+}
 
 if(!res.ok){
-showError(data.error || "failed to post")
+showError(data.error || "failed")
 return
 }
 
@@ -161,16 +170,16 @@ document.getElementById("fileStatus").innerText=""
 load()
 
 }catch(e){
-showError("network error")
+showError(e.message || "network error")
 }
 }
 
 function showFileName(){
-let file=newFile.files[0]
+let file = newFile.files[0]
 if(file){
-document.getElementById("fileStatus").innerText="Ready: "+file.name
+document.getElementById("fileStatus").innerText = "Ready: " + file.name
 }else{
-document.getElementById("fileStatus").innerText=""
+document.getElementById("fileStatus").innerText = ""
 }
 }
 
