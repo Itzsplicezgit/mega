@@ -75,16 +75,22 @@ return res.status(429).json({error:"slow"})
 const t=threads.find(x=>x.id===req.params.id)
 if(!t)return res.status(404).json({error:"not found"})
 
-t.replies.push({
+if(!req.file){
+return res.status(400).json({error:"file required"})
+}
+
+const reply={
 text:req.body.text||"",
-media:req.file?"/uploads/"+req.file.filename:"",
+media:"/uploads/"+req.file.filename,
 time:new Date().toISOString()
-})
+}
+
+t.replies.push(reply)
 
 trimReplies(t)
 replyCooldown[user]=now()
 
-res.json({ok:true})
+res.json({ok:true,thread:t})
 })
 
 app.post("/admin/login",(req,res)=>{
