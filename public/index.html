@@ -24,6 +24,7 @@ textarea,input{width:100%;background:#050505;border:1px solid #333;color:#ddd;pa
 input[type=file]{display:none}
 .section{margin-top:20px}
 .small{font-size:12px;color:#888;margin-top:6px}
+.error{color:#ff4d4d;font-size:13px;margin-top:8px}
 </style>
 </head>
 
@@ -58,6 +59,7 @@ Attach Media
 </label>
 
 <div id="fileStatus" class="small"></div>
+<div id="errorBox" class="error"></div>
 
 <button onclick="sendReply()">Reply</button>
 
@@ -70,6 +72,10 @@ Attach Media
 
 let threads=[]
 let current=null
+
+function showError(msg){
+document.getElementById("errorBox").innerText=msg||""
+}
 
 async function load(){
 let res=await fetch("/threads")
@@ -109,6 +115,7 @@ box.appendChild(div)
 function openThread(t){
 current=t
 document.getElementById("viewModal").style.display="block"
+showError("")
 
 document.getElementById("threadView").innerHTML=`
 <div class="post">
@@ -128,12 +135,12 @@ document.getElementById("viewModal").style.display="none"
 current=null
 document.getElementById("fileStatus").innerText=""
 replyFile.value=""
+showError("")
 
-// ✅ FIX: stop video playback when closing modal
-let video = document.querySelector("#threadView video")
+let video=document.querySelector("#threadView video")
 if(video){
 video.pause()
-video.currentTime = 0
+video.currentTime=0
 }
 }
 
@@ -162,22 +169,46 @@ box.appendChild(div)
 }
 
 async function sendReply(){
-let fd=new FormData()
-fd.append("text",replyText.value)
+showError("")
 
 let file=replyFile.files[0]
-if(file)fd.append("media",file)
+if(!file){
+showError("File required")
+return
+}
 
-await fetch(`/threads/${current.id}/reply`,{
+let fd=new FormData()
+fd.append("text",replyText.value)
+fd.append("media",file)
+
+try{
+let res=await fetch(`/threads/${current.id}/reply`,{
 method:"POST",
 body:fd
 })
 
+let data=await res.json()
+
+if(!res.ok){
+if(res.status===429){
+showError("Slow down — wait 30 seconds")
+}else{
+showError(data.error||"Error")
+}
+return
+}
+
 replyText.value=""
 replyFile.value=""
 document.getElementById("fileStatus").innerText=""
-load()
-openThread(current)
+showError("")
+
+current=data.thread
+renderReplies()
+
+}catch(e){
+showError("Network error")
+}
 }
 
 function showFileName(){
