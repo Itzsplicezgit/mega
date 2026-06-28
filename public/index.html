@@ -23,7 +23,7 @@ textarea,input{width:100%;background:#050505;border:1px solid #333;color:#ddd;pa
 .file-btn{display:inline-block;margin-top:10px;padding:10px 14px;border:1px solid #333;border-radius:14px;background:#1a1a1a;cursor:pointer}
 input[type=file]{display:none}
 .section{margin-top:20px}
-.reply-container{max-height:60vh;overflow:auto}
+.small{font-size:12px;color:#888;margin-top:6px}
 </style>
 </head>
 
@@ -48,14 +48,16 @@ input[type=file]{display:none}
 <div class="section">
 <h3>Replies</h3>
 
-<div id="replyBox" class="reply-container"></div>
+<div id="replyBox"></div>
 
 <textarea id="replyText"></textarea>
 
 <label class="file-btn">
 Attach Media
-<input type="file" id="replyFile" accept="image/*,video/*">
+<input type="file" id="replyFile" accept="image/*,video/*" onchange="showFileName()">
 </label>
+
+<div id="fileStatus" class="small"></div>
 
 <button onclick="sendReply()">Reply</button>
 
@@ -68,16 +70,14 @@ Attach Media
 
 let threads=[]
 let current=null
-let replyIndex=0
-let replyWindow=20
 
 async function load(){
 let res=await fetch("/threads")
 threads=await res.json()
-renderThreads()
+render()
 }
 
-function renderThreads(){
+function render(){
 let box=document.getElementById("threads")
 box.innerHTML=""
 
@@ -88,8 +88,11 @@ div.onclick=()=>openThread(t)
 
 let media=""
 if(t.media){
-if(t.media.includes("mp4")) media=`<video class="media" controls src="${t.media}"></video>`
-else media=`<img class="media" src="${t.media}">`
+if(t.media.includes("mp4")){
+media=`<video class="media" src="${t.media}"></video>`
+}else{
+media=`<img class="media" src="${t.media}">`
+}
 }
 
 div.innerHTML=`
@@ -105,7 +108,6 @@ box.appendChild(div)
 
 function openThread(t){
 current=t
-replyIndex=0
 document.getElementById("viewModal").style.display="block"
 
 document.getElementById("threadView").innerHTML=`
@@ -119,37 +121,24 @@ ${t.media? (t.media.includes("mp4")
 `
 
 renderReplies()
-attachScroll()
 }
 
 function closeView(){
 document.getElementById("viewModal").style.display="none"
+current=null
+document.getElementById("fileStatus").innerText=""
+replyFile.value=""
 }
 
-function attachScroll(){
+function renderReplies(){
 let box=document.getElementById("replyBox")
-box.onscroll=()=>{
-if(box.scrollTop+box.clientHeight>=box.scrollHeight-50){
-replyIndex+=replyWindow
-renderReplies()
-}
-if(box.scrollTop===0 && replyIndex>0){
-replyIndex=Math.max(0,replyIndex-replyWindow)
-renderReplies(true)
-}
-}
-}
+box.innerHTML=""
 
-function renderReplies(keepScroll){
-let box=document.getElementById("replyBox")
+if(!current)return
 
 let sorted=[...current.replies].sort((a,b)=>new Date(b.time)-new Date(a.time))
 
-let slice=sorted.slice(replyIndex,replyIndex+replyWindow)
-
-if(!keepScroll) box.innerHTML=""
-
-slice.forEach(r=>{
+sorted.forEach(r=>{
 let div=document.createElement("div")
 div.className="post"
 
@@ -168,6 +157,7 @@ box.appendChild(div)
 async function sendReply(){
 let fd=new FormData()
 fd.append("text",replyText.value)
+
 let file=replyFile.files[0]
 if(file)fd.append("media",file)
 
@@ -178,8 +168,18 @@ body:fd
 
 replyText.value=""
 replyFile.value=""
+document.getElementById("fileStatus").innerText=""
 load()
 openThread(current)
+}
+
+function showFileName(){
+let file=replyFile.files[0]
+if(file){
+document.getElementById("fileStatus").innerText="Ready: "+file.name
+}else{
+document.getElementById("fileStatus").innerText=""
+}
 }
 
 function escape(x){
