@@ -66,6 +66,7 @@ res.json(threads)
 })
 
 app.post("/threads/:id/reply",upload.single("media"),(req,res)=>{
+try{
 const user=ip(req)
 
 if(!canReply(user)){
@@ -75,13 +76,10 @@ return res.status(429).json({error:"slow"})
 const t=threads.find(x=>x.id===req.params.id)
 if(!t)return res.status(404).json({error:"not found"})
 
-if(!req.file){
-return res.status(400).json({error:"file required"})
-}
-
+// ✅ FIX: file is OPTIONAL now
 const reply={
 text:req.body.text||"",
-media:"/uploads/"+req.file.filename,
+media:req.file?"/uploads/"+req.file.filename:"",
 time:new Date().toISOString()
 }
 
@@ -91,6 +89,10 @@ trimReplies(t)
 replyCooldown[user]=now()
 
 res.json({ok:true,thread:t})
+
+}catch(e){
+res.status(500).json({error:"server error"})
+}
 })
 
 app.post("/admin/login",(req,res)=>{
@@ -114,6 +116,7 @@ res.json({token})
 })
 
 app.post("/admin/thread",upload.single("media"),(req,res)=>{
+try{
 if(!isAdmin(req))return res.status(403).json({error:"no"})
 
 const thread={
@@ -129,6 +132,10 @@ threads.unshift(thread)
 trimThreads()
 
 res.json(thread)
+
+}catch(e){
+res.status(500).json({error:"server error"})
+}
 })
 
 app.get("/admin/threads",(req,res)=>{
