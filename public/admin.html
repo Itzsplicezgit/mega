@@ -6,100 +6,20 @@
 <title>Admin Panel</title>
 
 <style>
-body{
-margin:0;
-background:#050505;
-color:#ddd;
-font-family:Arial;
-}
-
-header{
-padding:16px;
-background:#0d0d0d;
-border-bottom:1px solid #222;
-display:flex;
-justify-content:space-between;
-align-items:center;
-}
-
+body{margin:0;background:#050505;color:#ddd;font-family:Arial}
+header{padding:16px;background:#0d0d0d;border-bottom:1px solid #222;display:flex;justify-content:space-between;align-items:center}
 h1{font-size:18px;color:#ccc}
-
-button{
-background:#1a1a1a;
-border:1px solid #333;
-color:#ddd;
-padding:10px 12px;
-border-radius:12px;
-cursor:pointer;
-margin:4px;
-}
-
+button{background:#1a1a1a;border:1px solid #333;color:#ddd;padding:10px 12px;border-radius:12px;cursor:pointer;margin:4px}
 button:hover{background:#262626}
-
-.container{
-max-width:1000px;
-margin:auto;
-padding:20px;
-}
-
-textarea,input{
-width:100%;
-padding:10px;
-margin-top:10px;
-background:#050505;
-border:1px solid #333;
-color:#ddd;
-border-radius:10px;
-}
-
-.thread{
-background:#111;
-border:1px solid #2a2a2a;
-padding:12px;
-margin-bottom:10px;
-border-radius:10px;
-}
-
+.container{max-width:1000px;margin:auto;padding:20px}
+textarea,input{width:100%;padding:10px;margin-top:10px;background:#050505;border:1px solid #333;color:#ddd;border-radius:10px}
+.thread{background:#111;border:1px solid #2a2a2a;padding:12px;margin-bottom:10px;border-radius:10px}
 .meta{font-size:12px;color:#888}
-
-.actions{
-margin-top:10px;
-display:flex;
-flex-wrap:wrap;
-gap:6px;
-}
-
-.sectionHeader{
-margin-top:10px;
-padding:8px;
-background:#0d0d0d;
-border:1px solid #222;
-border-radius:8px;
-cursor:pointer;
-font-size:13px;
-color:#ccc;
-}
-
-.sectionBody{
-display:none;
-padding:8px;
-}
-
-.reply{
-background:#0d0d0d;
-border:1px solid #222;
-padding:8px;
-margin-top:6px;
-border-radius:8px;
-font-size:13px;
-}
-
-img,video{
-max-width:250px;
-margin-top:8px;
-border-radius:8px;
-}
-
+.actions{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
+.sectionHeader{margin-top:10px;padding:8px;background:#0d0d0d;border:1px solid #222;border-radius:8px;cursor:pointer;font-size:13px;color:#ccc}
+.sectionBody{display:none;padding:8px}
+.reply{background:#0d0d0d;border:1px solid #222;padding:8px;margin-top:6px;border-radius:8px;font-size:13px}
+img,video{max-width:250px;margin-top:8px;border-radius:8px}
 .hidden{display:none}
 </style>
 </head>
@@ -115,7 +35,7 @@ border-radius:8px;
 
 <div id="loginBox">
 <h2>Login</h2>
-<input type="password" id="pass" placeholder="password">
+<input type="password" id="pass">
 <button onclick="login()">Login</button>
 </div>
 
@@ -123,9 +43,7 @@ border-radius:8px;
 
 <h2>Create Thread</h2>
 <textarea id="newText"></textarea>
-
 <input type="file" id="newFile" accept="image/*,video/*">
-
 <button onclick="createThread()">Post Thread</button>
 <button onclick="load()">Refresh</button>
 
@@ -141,31 +59,25 @@ let token = localStorage.getItem("adminToken")
 
 const loginBox = document.getElementById("loginBox")
 const panel = document.getElementById("panel")
-const threads = document.getElementById("threads")
+const threadsBox = document.getElementById("threads")
 
 const pass = document.getElementById("pass")
 const newText = document.getElementById("newText")
 const newFile = document.getElementById("newFile")
 
-function escape(x){
-return x ? x.replaceAll("&","&amp;").replaceAll("<","&lt;") : ""
+function esc(x){
+return (x||"").replaceAll("&","&amp;").replaceAll("<","&lt;")
 }
 
-/* =========================
-   LOGIN
-========================= */
-
 async function login(){
-let res = await fetch("/admin/login",{
+let r = await fetch("/admin/login",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({password:pass.value})
 })
-
-let data = await res.json()
-
-if(data.token){
-token = data.token
+let d = await r.json()
+if(d.token){
+token = d.token
 localStorage.setItem("adminToken",token)
 loginBox.classList.add("hidden")
 panel.classList.remove("hidden")
@@ -178,57 +90,38 @@ localStorage.removeItem("adminToken")
 location.reload()
 }
 
-/* =========================
-   LOAD
-========================= */
-
 async function load(){
-let res = await fetch("/admin/threads",{headers:{"x-admin-token":token}})
-let data = await res.json()
-render(data)
+let r = await fetch("/admin/threads",{headers:{"x-admin-token":token}})
+let d = await r.json()
+if(!Array.isArray(d)) d = []
+render(d)
 }
-
-/* =========================
-   CREATE THREAD (FIXED)
-========================= */
 
 async function createThread(){
-
 let fd = new FormData()
 fd.append("text", newText.value || "")
+if(newFile.files[0]) fd.append("media", newFile.files[0])
 
-if(newFile.files[0]){
-fd.append("media", newFile.files[0])
-}
-
-let res = await fetch("/admin/thread",{
+let r = await fetch("/admin/thread",{
 method:"POST",
-headers:{
-"x-admin-token": token
-},
-body: fd
+headers:{"x-admin-token":token},
+body:fd
 })
 
-let data = await res.json()
-
-if(!res.ok){
-alert(data.error || "failed")
-return
-}
-
-newText.value = ""
-newFile.value = ""
+if(r.ok){
+newText.value=""
+newFile.value=""
 load()
 }
-
-/* =========================
-   RENDER
-========================= */
+}
 
 function render(data){
-threads.innerHTML=""
+threadsBox.innerHTML=""
 
 data.forEach(t=>{
+t.pendingReplies = t.pendingReplies || []
+t.replies = t.replies || []
+
 let div = document.createElement("div")
 div.className="thread"
 
@@ -240,11 +133,8 @@ media = t.media.includes("mp4")
 }
 
 div.innerHTML = `
-<div class="meta">
-ID: ${t.id} • ${new Date(t.time).toLocaleTimeString()}
-</div>
-
-<p>${escape(t.text)}</p>
+<div class="meta">${t.id} • ${new Date(t.time).toLocaleTimeString()}</div>
+<p>${esc(t.text)}</p>
 ${media}
 
 <div class="actions">
@@ -253,62 +143,44 @@ ${media}
 <button onclick="bottom('${t.id}')">Bottom</button>
 </div>
 
-<div class="sectionHeader" onclick="toggle(this)">
-Pending (${t.pendingReplies.length})
-</div>
+<div class="sectionHeader" onclick="toggle(this)">Pending (${t.pendingReplies.length})</div>
 <div class="sectionBody">
-
 ${t.pendingReplies.map(r=>`
 <div class="reply">
-${escape(r.text)}<br>
+${esc(r.text)}
 ${r.media ? (r.media.includes("mp4")
 ? `<video controls src="${r.media}"></video>`
 : `<img src="${r.media}">`) : ""}
-
 <br>
 <button onclick="approveReply('${t.id}','${r.id}')">Approve</button>
 <button onclick="delReply('${t.id}','${r.id}')">Reject</button>
 </div>
 `).join("")}
-
 </div>
 
-<div class="sectionHeader" onclick="toggle(this)">
-Approved (${t.replies.length})
-</div>
+<div class="sectionHeader" onclick="toggle(this)">Approved (${t.replies.length})</div>
 <div class="sectionBody">
-
 ${t.replies.map(r=>`
 <div class="reply">
-${escape(r.text)}<br>
+${esc(r.text)}
 ${r.media ? (r.media.includes("mp4")
 ? `<video controls src="${r.media}"></video>`
 : `<img src="${r.media}">`) : ""}
-
 <br>
 <button onclick="delReply('${t.id}','${r.id}')">Delete</button>
 </div>
 `).join("")}
-
 </div>
 `
 
-threads.appendChild(div)
+threadsBox.appendChild(div)
 })
 }
 
-/* =========================
-   TOGGLE
-========================= */
-
 function toggle(el){
-let body = el.nextElementSibling
-body.style.display = body.style.display === "block" ? "none" : "block"
+let b = el.nextElementSibling
+b.style.display = b.style.display==="block"?"none":"block"
 }
-
-/* =========================
-   ACTIONS
-========================= */
 
 async function del(id){
 await fetch(`/admin/thread/${id}`,{
@@ -334,25 +206,21 @@ headers:{"x-admin-token":token}
 load()
 }
 
-async function approveReply(threadId, replyId){
-await fetch(`/admin/thread/${threadId}/reply/${replyId}/approve`,{
+async function approveReply(tid,rid){
+await fetch(`/admin/thread/${tid}/reply/${rid}/approve`,{
 method:"POST",
 headers:{"x-admin-token":token}
 })
 load()
 }
 
-async function delReply(threadId, replyId){
-await fetch(`/admin/thread/${threadId}/reply/${replyId}`,{
+async function delReply(tid,rid){
+await fetch(`/admin/thread/${tid}/reply/${rid}`,{
 method:"DELETE",
 headers:{"x-admin-token":token}
 })
 load()
 }
-
-/* =========================
-   AUTO LOGIN
-========================= */
 
 if(token){
 loginBox.classList.add("hidden")
