@@ -156,6 +156,9 @@ Attach Media
 
 let token = localStorage.getItem("adminToken")
 
+/* =========================
+   ERROR
+========================= */
 function showError(msg){
 document.getElementById("errorBox").innerText = msg || ""
 }
@@ -163,7 +166,6 @@ document.getElementById("errorBox").innerText = msg || ""
 /* =========================
    AUTH
 ========================= */
-
 async function login(){
 let res = await fetch("/admin/login",{
 method:"POST",
@@ -192,7 +194,6 @@ location.reload()
 /* =========================
    LOAD THREADS
 ========================= */
-
 async function load(){
 let res = await fetch("/admin/threads",{headers:{"x-admin-token":token}})
 if(res.status===403){alert("not logged in");return}
@@ -204,7 +205,6 @@ render(data)
 /* =========================
    RENDER
 ========================= */
-
 function render(data){
 threads.innerHTML=""
 
@@ -221,28 +221,64 @@ media = `<img src="${t.media}" style="max-width:250px;margin-top:10px">`
 }
 }
 
-/* replies UI */
-let repliesHTML = ""
-if(t.replies && t.replies.length){
-repliesHTML = `<div class="replyBox">
-<strong>Replies (${t.replies.length})</strong>
+/* =========================
+   PENDING REPLIES
+========================= */
+let pendingHTML = ""
+if(t.pendingReplies && t.pendingReplies.length){
+pendingHTML = `
+<div class="replyBox">
+<strong style="color:#ffcc00">Pending Replies (${t.pendingReplies.length})</strong>
 `
 
-t.replies.forEach(r=>{
-repliesHTML += `
+t.pendingReplies.forEach(r=>{
+pendingHTML += `
 <div class="reply">
 ${escape(r.text)}
 <small>${new Date(r.time).toLocaleString()}</small>
-<button onclick="delReply('${t.id}','${r.id}')">Delete Reply</button>
+
+<button onclick="approveReply('${t.id}','${r.id}')">Approve</button>
+<button onclick="delReply('${t.id}','${r.id}')">Reject</button>
 </div>
 `
 })
 
-repliesHTML += `</div>`
+pendingHTML += `</div>`
 }
 
+/* =========================
+   APPROVED REPLIES
+========================= */
+let approvedHTML = ""
+if(t.replies && t.replies.length){
+approvedHTML = `
+<div class="replyBox">
+<strong>Approved Replies (${t.replies.length})</strong>
+`
+
+t.replies.forEach(r=>{
+approvedHTML += `
+<div class="reply">
+${escape(r.text)}
+<small>${new Date(r.time).toLocaleString()}</small>
+
+<button onclick="delReply('${t.id}','${r.id}')">Delete</button>
+</div>
+`
+})
+
+approvedHTML += `</div>`
+}
+
+/* =========================
+   THREAD HTML
+========================= */
 div.innerHTML = `
-<div class="meta">ID: ${t.id}<br>Anonymous • ${new Date(t.time).toLocaleTimeString()}</div>
+<div class="meta">
+ID: ${t.id}<br>
+Anonymous • ${new Date(t.time).toLocaleTimeString()}
+</div>
+
 <p>${escape(t.text)}</p>
 ${media}
 
@@ -252,7 +288,8 @@ ${media}
 <button onclick="bottom('${t.id}')">Move Bottom</button>
 </div>
 
-${repliesHTML}
+${pendingHTML}
+${approvedHTML}
 `
 
 threads.appendChild(div)
@@ -262,7 +299,6 @@ threads.appendChild(div)
 /* =========================
    CREATE THREAD
 ========================= */
-
 async function createThread(){
 showError("")
 
@@ -303,7 +339,6 @@ showError(e.message || "network error")
 /* =========================
    THREAD ACTIONS
 ========================= */
-
 async function del(id){
 await fetch(`/admin/thread/${id}`,{
 method:"DELETE",
@@ -329,8 +364,15 @@ load()
 }
 
 /* =========================
-   REPLY DELETE
+   REPLY MODERATION
 ========================= */
+async function approveReply(threadId, replyId){
+await fetch(`/admin/thread/${threadId}/reply/${replyId}/approve`,{
+method:"POST",
+headers:{"x-admin-token":token}
+})
+load()
+}
 
 async function delReply(threadId, replyId){
 await fetch(`/admin/thread/${threadId}/reply/${replyId}`,{
@@ -343,7 +385,6 @@ load()
 /* =========================
    HELPERS
 ========================= */
-
 function showFileName(){
 let file = newFile.files[0]
 fileStatus.innerText = file ? ("Ready: " + file.name) : ""
