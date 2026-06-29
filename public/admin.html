@@ -6,19 +6,107 @@
 <title>Admin Panel</title>
 
 <style>
-body{margin:0;background:#050505;color:#ddd;font-family:Arial}
-header{padding:16px;background:#0d0d0d;border-bottom:1px solid #222;display:flex;justify-content:space-between;align-items:center}
+body{
+margin:0;
+background:#050505;
+color:#ddd;
+font-family:Arial;
+}
+
+header{
+padding:16px;
+background:#0d0d0d;
+border-bottom:1px solid #222;
+display:flex;
+justify-content:space-between;
+align-items:center;
+}
+
 h1{font-size:18px;color:#ccc}
-button{background:#1a1a1a;border:1px solid #333;color:#ddd;padding:10px 12px;border-radius:12px;cursor:pointer;margin:4px}
+
+button{
+background:#1a1a1a;
+border:1px solid #333;
+color:#ddd;
+padding:10px 12px;
+border-radius:12px;
+cursor:pointer;
+margin:4px;
+}
+
 button:hover{background:#262626}
-.container{max-width:1000px;margin:auto;padding:20px}
-textarea,input{width:100%;padding:10px;margin-top:10px;background:#050505;border:1px solid #333;color:#ddd;border-radius:10px}
-.thread{background:#111;border:1px solid #2a2a2a;padding:12px;margin-bottom:10px;border-radius:10px}
-.meta{font-size:12px;color:#888}
-.actions{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
+
+.container{
+max-width:1000px;
+margin:auto;
+padding:20px;
+}
+
+textarea,input{
+width:100%;
+padding:10px;
+margin-top:10px;
+background:#050505;
+border:1px solid #333;
+color:#ddd;
+border-radius:10px;
+}
+
+.thread{
+background:#111;
+border:1px solid #2a2a2a;
+padding:12px;
+margin-bottom:10px;
+border-radius:10px;
+}
+
+.meta{
+font-size:12px;
+color:#888;
+}
+
+.actions{
+margin-top:10px;
+display:flex;
+flex-wrap:wrap;
+gap:6px;
+}
+
+.replyBox{
+margin-top:10px;
+padding:10px;
+border-top:1px solid #222;
+}
+
+.reply{
+background:#0d0d0d;
+border:1px solid #222;
+padding:8px;
+margin-top:6px;
+border-radius:8px;
+font-size:13px;
+}
+
+.reply small{
+color:#888;
+display:block;
+margin-top:4px;
+}
+
 .hidden{display:none}
-.file-btn{display:inline-block;margin-top:10px;padding:10px 14px;border:1px solid #333;border-radius:12px;background:#1a1a1a;cursor:pointer}
+
+.file-btn{
+display:inline-block;
+margin-top:10px;
+padding:10px 14px;
+border:1px solid #333;
+border-radius:12px;
+background:#1a1a1a;
+cursor:pointer;
+}
+
 input[type=file]{display:none}
+
 .small{font-size:12px;color:#888;margin-top:6px}
 .error{color:#ff4d4d;font-size:13px;margin-top:8px}
 </style>
@@ -33,12 +121,14 @@ input[type=file]{display:none}
 
 <div class="container">
 
+<!-- LOGIN -->
 <div id="loginBox">
 <h2>Login</h2>
 <input type="password" id="pass" placeholder="password">
 <button onclick="login()">Login</button>
 </div>
 
+<!-- PANEL -->
 <div id="panel" class="hidden">
 
 <h2>Create Thread</h2>
@@ -70,6 +160,10 @@ function showError(msg){
 document.getElementById("errorBox").innerText = msg || ""
 }
 
+/* =========================
+   AUTH
+========================= */
+
 async function login(){
 let res = await fetch("/admin/login",{
 method:"POST",
@@ -95,6 +189,10 @@ localStorage.removeItem("adminToken")
 location.reload()
 }
 
+/* =========================
+   LOAD THREADS
+========================= */
+
 async function load(){
 let res = await fetch("/admin/threads",{headers:{"x-admin-token":token}})
 if(res.status===403){alert("not logged in");return}
@@ -102,6 +200,10 @@ if(res.status===403){alert("not logged in");return}
 let data = await res.json()
 render(data)
 }
+
+/* =========================
+   RENDER
+========================= */
 
 function render(data){
 threads.innerHTML=""
@@ -119,20 +221,47 @@ media = `<img src="${t.media}" style="max-width:250px;margin-top:10px">`
 }
 }
 
-div.innerHTML=`
+/* replies UI */
+let repliesHTML = ""
+if(t.replies && t.replies.length){
+repliesHTML = `<div class="replyBox">
+<strong>Replies (${t.replies.length})</strong>
+`
+
+t.replies.forEach(r=>{
+repliesHTML += `
+<div class="reply">
+${escape(r.text)}
+<small>${new Date(r.time).toLocaleString()}</small>
+<button onclick="delReply('${t.id}','${r.id}')">Delete Reply</button>
+</div>
+`
+})
+
+repliesHTML += `</div>`
+}
+
+div.innerHTML = `
 <div class="meta">ID: ${t.id}<br>Anonymous • ${new Date(t.time).toLocaleTimeString()}</div>
 <p>${escape(t.text)}</p>
 ${media}
+
 <div class="actions">
-<button onclick="del('${t.id}')">Delete</button>
+<button onclick="del('${t.id}')">Delete Thread</button>
 <button onclick="pin('${t.id}')">Pin Top</button>
 <button onclick="bottom('${t.id}')">Move Bottom</button>
 </div>
+
+${repliesHTML}
 `
 
 threads.appendChild(div)
 })
 }
+
+/* =========================
+   CREATE THREAD
+========================= */
 
 async function createThread(){
 showError("")
@@ -153,11 +282,8 @@ body:fd
 let text = await res.text()
 let data
 
-try{
-data = JSON.parse(text)
-}catch(e){
-throw new Error(text || "server error")
-}
+try{ data = JSON.parse(text) }
+catch(e){ throw new Error(text || "server error") }
 
 if(!res.ok){
 showError(data.error || "failed")
@@ -166,7 +292,7 @@ return
 
 newText.value=""
 newFile.value=""
-document.getElementById("fileStatus").innerText=""
+fileStatus.innerText=""
 load()
 
 }catch(e){
@@ -174,14 +300,9 @@ showError(e.message || "network error")
 }
 }
 
-function showFileName(){
-let file = newFile.files[0]
-if(file){
-document.getElementById("fileStatus").innerText = "Ready: " + file.name
-}else{
-document.getElementById("fileStatus").innerText = ""
-}
-}
+/* =========================
+   THREAD ACTIONS
+========================= */
 
 async function del(id){
 await fetch(`/admin/thread/${id}`,{
@@ -207,10 +328,32 @@ headers:{"x-admin-token":token}
 load()
 }
 
-function escape(x){
-return x?x.replaceAll("&","&amp;").replaceAll("<","&lt;"):""
+/* =========================
+   REPLY DELETE
+========================= */
+
+async function delReply(threadId, replyId){
+await fetch(`/admin/thread/${threadId}/reply/${replyId}`,{
+method:"DELETE",
+headers:{"x-admin-token":token}
+})
+load()
 }
 
+/* =========================
+   HELPERS
+========================= */
+
+function showFileName(){
+let file = newFile.files[0]
+fileStatus.innerText = file ? ("Ready: " + file.name) : ""
+}
+
+function escape(x){
+return x ? x.replaceAll("&","&amp;").replaceAll("<","&lt;") : ""
+}
+
+/* AUTO LOGIN */
 if(token){
 loginBox.classList.add("hidden")
 panel.classList.remove("hidden")
