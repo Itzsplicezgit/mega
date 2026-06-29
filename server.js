@@ -14,22 +14,13 @@ if (!fs.existsSync("uploads")) {
     fs.mkdirSync("uploads")
 }
 
-/* =========================
-   STATE
-========================= */
-
 let threads = []
 
 const adminSessions = {}
 const adminFailCooldown = {}
-const replyCooldown = {}
 
 const MAX_THREADS = 500
 const MAX_REPLIES = 500
-
-/* =========================
-   UPLOADS
-========================= */
 
 function storageEngine() {
     return multer.diskStorage({
@@ -46,16 +37,10 @@ const upload = multer({
     limits: { fileSize: 50 * 1024 * 1024 }
 })
 
-/* =========================
-   HELPERS
-========================= */
-
 function ip(req) {
-    return req.headers["x-forwarded-for"] || req.socket.remoteAddress
-}
-
-function now() {
-    return Date.now()
+    return (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "")
+        .split(",")[0]
+        .trim()
 }
 
 function isAdmin(req) {
@@ -64,7 +49,8 @@ function isAdmin(req) {
 }
 
 function requireAdmin(req, res) {
-    if (!isAdmin(req)) {
+    const token = req.headers["x-admin-token"]
+    if (!token || !adminSessions[token]) {
         res.status(403).json({ error: "no" })
         return false
     }
@@ -75,43 +61,40 @@ function findThread(id) {
     return threads.find(t => t.id === id)
 }
 
-/* =========================
-   THREAD LIMITS
-========================= */
-
 function trimThreads() {
     if (threads.length > MAX_THREADS) {
         threads = threads.slice(0, MAX_THREADS)
     }
 }
 
-function trimReplies(t) {
-    if (t.replies.length > MAX_REPLIES) {
-        t.replies = t.replies.slice(-MAX_REPLIES)
-    }
-}
-
-/* =========================
-   PUBLIC
-========================= */
-
 app.get("/threads", (req, res) => {
     res.json(threads)
 })
 
-/* =========================
-   ADMIN LOGIN
-========================= */
+app.get("/admin/threads", (req, res) => {
+    if (!requireAdmin(req, res)) return
+
+    res.json(
+        threads.map(t => ({
+            id: t.id,
+            text: t.text,
+            media: t.media,
+            time: t.time,
+            replies: t.replies || [],
+            pendingReplies: t.pendingReplies || []
+        }))
+    )
+})
 
 app.post("/admin/login", (req, res) => {
     const user = ip(req)
 
-    if (!adminFailCooldown[user] || now() - adminFailCooldown[user] > 30000) {
+    if (!adminFailCooldown[user] || Date.now() - adminFailCooldown[user] > 30000) {
         adminFailCooldown[user] = 0
     }
 
     if (req.body.password !== "fish") {
-        adminFailCooldown[user] = now()
+        adminFailCooldown[user] = Date.now()
         return res.status(403).json({ error: "wrong" })
     }
 
@@ -120,10 +103,6 @@ app.post("/admin/login", (req, res) => {
 
     res.json({ token })
 })
-
-/* =========================
-   CREATE THREAD
-========================= */
 
 app.post("/admin/thread", upload.single("media"), (req, res) => {
     if (!isAdmin(req)) return res.status(403).json({ error: "no" })
@@ -143,17 +122,7 @@ app.post("/admin/thread", upload.single("media"), (req, res) => {
     res.json(thread)
 })
 
-/* =========================
-   USER REPLY
-========================= */
-
 app.post("/threads/:id/reply", upload.single("media"), (req, res) => {
-    const user = ip(req)
-
-    if (!replyCooldown[user] || now() - replyCooldown[user] < 10000) {
-        return res.status(429).json({ error: "slow" })
-    }
-
     const t = findThread(req.params.id)
     if (!t) return res.status(404).json({ error: "not found" })
 
@@ -164,15 +133,17 @@ app.post("/threads/:id/reply", upload.single("media"), (req, res) => {
         time: new Date().toISOString()
     }
 
+    if (!t.pendingReplies) t.pendingReplies = []
+    if (!t.replies) t.replies = []
+
     t.pendingReplies.push(reply)
-    replyCooldown[user] = now()
+
+    if (t.pendingReplies.length > MAX_REPLIES) {
+        t.pendingReplies = t.pendingReplies.slice(-MAX_REPLIES)
+    }
 
     res.json({ ok: true })
 })
-
-/* =========================
-   ADMIN THREAD ACTIONS (FIXED)
-========================= */
 
 app.delete("/admin/thread/:id", (req, res) => {
     if (!requireAdmin(req, res)) return
@@ -188,6 +159,7 @@ app.post("/admin/thread/:id/pin", (req, res) => {
     if (!t) return res.status(404).json({ error: "not found" })
 
     threads = [t, ...threads.filter(x => x.id !== t.id)]
+
     res.json({ ok: true })
 })
 
@@ -198,12 +170,9 @@ app.post("/admin/thread/:id/bottom", (req, res) => {
     if (!t) return res.status(404).json({ error: "not found" })
 
     threads = [...threads.filter(x => x.id !== t.id), t]
+
     res.json({ ok: true })
 })
-
-/* =========================
-   MODERATION
-========================= */
 
 app.post("/admin/thread/:id/reply/:rid/approve", (req, res) => {
     if (!requireAdmin(req, res)) return
@@ -211,10 +180,12 @@ app.post("/admin/thread/:id/reply/:rid/approve", (req, res) => {
     const t = findThread(req.params.id)
     if (!t) return res.status(404).json({ error: "thread not found" })
 
-    const idx = t.pendingReplies.findIndex(r => r.id === req.params.rid)
+    const idx = (t.pendingReplies || []).findIndex(r => r.id === req.params.rid)
     if (idx === -1) return res.status(404).json({ error: "not found" })
 
     const reply = t.pendingReplies.splice(idx, 1)[0]
+
+    if (!t.replies) t.replies = []
     t.replies.push(reply)
 
     res.json({ ok: true })
@@ -226,15 +197,11 @@ app.delete("/admin/thread/:id/reply/:rid", (req, res) => {
     const t = findThread(req.params.id)
     if (!t) return res.status(404).json({ error: "thread not found" })
 
-    t.pendingReplies = t.pendingReplies.filter(r => r.id !== req.params.rid)
-    t.replies = t.replies.filter(r => r.id !== req.params.rid)
+    t.pendingReplies = (t.pendingReplies || []).filter(r => r.id !== req.params.rid)
+    t.replies = (t.replies || []).filter(r => r.id !== req.params.rid)
 
     res.json({ ok: true })
 })
-
-/* =========================
-   START
-========================= */
 
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
