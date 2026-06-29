@@ -124,9 +124,7 @@ border-radius:8px;
 <h2>Create Thread</h2>
 <textarea id="newText"></textarea>
 
-<label>
 <input type="file" id="newFile" accept="image/*,video/*">
-</label>
 
 <button onclick="createThread()">Post Thread</button>
 <button onclick="load()">Refresh</button>
@@ -153,7 +151,10 @@ function escape(x){
 return x ? x.replaceAll("&","&amp;").replaceAll("<","&lt;") : ""
 }
 
-/* LOGIN */
+/* =========================
+   LOGIN
+========================= */
+
 async function login(){
 let res = await fetch("/admin/login",{
 method:"POST",
@@ -177,14 +178,53 @@ localStorage.removeItem("adminToken")
 location.reload()
 }
 
-/* LOAD */
+/* =========================
+   LOAD
+========================= */
+
 async function load(){
 let res = await fetch("/admin/threads",{headers:{"x-admin-token":token}})
 let data = await res.json()
 render(data)
 }
 
-/* RENDER (COMPRESSED) */
+/* =========================
+   CREATE THREAD (FIXED)
+========================= */
+
+async function createThread(){
+
+let fd = new FormData()
+fd.append("text", newText.value || "")
+
+if(newFile.files[0]){
+fd.append("media", newFile.files[0])
+}
+
+let res = await fetch("/admin/thread",{
+method:"POST",
+headers:{
+"x-admin-token": token
+},
+body: fd
+})
+
+let data = await res.json()
+
+if(!res.ok){
+alert(data.error || "failed")
+return
+}
+
+newText.value = ""
+newFile.value = ""
+load()
+}
+
+/* =========================
+   RENDER
+========================= */
+
 function render(data){
 threads.innerHTML=""
 
@@ -213,7 +253,9 @@ ${media}
 <button onclick="bottom('${t.id}')">Bottom</button>
 </div>
 
-<div class="sectionHeader" onclick="toggle(this)">Pending (${t.pendingReplies.length})</div>
+<div class="sectionHeader" onclick="toggle(this)">
+Pending (${t.pendingReplies.length})
+</div>
 <div class="sectionBody">
 
 ${t.pendingReplies.map(r=>`
@@ -231,7 +273,9 @@ ${r.media ? (r.media.includes("mp4")
 
 </div>
 
-<div class="sectionHeader" onclick="toggle(this)">Approved (${t.replies.length})</div>
+<div class="sectionHeader" onclick="toggle(this)">
+Approved (${t.replies.length})
+</div>
 <div class="sectionBody">
 
 ${t.replies.map(r=>`
@@ -253,13 +297,19 @@ threads.appendChild(div)
 })
 }
 
-/* TOGGLE (IMPORTANT FOR LAG FIX) */
+/* =========================
+   TOGGLE
+========================= */
+
 function toggle(el){
 let body = el.nextElementSibling
 body.style.display = body.style.display === "block" ? "none" : "block"
 }
 
-/* ACTIONS */
+/* =========================
+   ACTIONS
+========================= */
+
 async function del(id){
 await fetch(`/admin/thread/${id}`,{
 method:"DELETE",
@@ -300,7 +350,10 @@ headers:{"x-admin-token":token}
 load()
 }
 
-/* AUTO LOGIN */
+/* =========================
+   AUTO LOGIN
+========================= */
+
 if(token){
 loginBox.classList.add("hidden")
 panel.classList.remove("hidden")
