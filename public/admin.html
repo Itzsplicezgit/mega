@@ -1,8 +1,7 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin Panel</title>
 
 <style>
@@ -14,140 +13,79 @@ font-family:Arial;
 }
 
 header{
-padding:16px;
+padding:14px;
 background:#0d0d0d;
 border-bottom:1px solid #222;
 display:flex;
 justify-content:space-between;
-align-items:center;
 }
 
-h1{font-size:18px;color:#ccc}
+.container{
+display:flex;
+height:100vh;
+}
+
+.left{
+width:35%;
+border-right:1px solid #222;
+overflow:auto;
+}
+
+.right{
+flex:1;
+padding:10px;
+overflow:auto;
+}
+
+.thread{
+padding:10px;
+border-bottom:1px solid #222;
+cursor:pointer;
+}
+
+.thread:hover{background:#111}
+
+.badge{
+color:#ffcc00;
+font-size:12px;
+}
+
+.reply{
+background:#111;
+padding:8px;
+margin:6px 0;
+border-radius:6px;
+border:1px solid #222;
+}
 
 button{
 background:#1a1a1a;
 border:1px solid #333;
 color:#ddd;
-padding:10px 12px;
-border-radius:12px;
-cursor:pointer;
+padding:6px 10px;
 margin:4px;
-}
-
-button:hover{background:#262626}
-
-.container{
-max-width:1000px;
-margin:auto;
-padding:20px;
-}
-
-textarea,input{
-width:100%;
-padding:10px;
-margin-top:10px;
-background:#050505;
-border:1px solid #333;
-color:#ddd;
-border-radius:10px;
-}
-
-.thread{
-background:#111;
-border:1px solid #2a2a2a;
-padding:12px;
-margin-bottom:10px;
-border-radius:10px;
-}
-
-.meta{
-font-size:12px;
-color:#888;
-}
-
-.actions{
-margin-top:10px;
-display:flex;
-flex-wrap:wrap;
-gap:6px;
-}
-
-.replyBox{
-margin-top:10px;
-padding:10px;
-border-top:1px solid #222;
-}
-
-.reply{
-background:#0d0d0d;
-border:1px solid #222;
-padding:8px;
-margin-top:6px;
-border-radius:8px;
-font-size:13px;
-}
-
-.reply small{
-color:#888;
-display:block;
-margin-top:4px;
-}
-
-.hidden{display:none}
-
-.file-btn{
-display:inline-block;
-margin-top:10px;
-padding:10px 14px;
-border:1px solid #333;
-border-radius:12px;
-background:#1a1a1a;
 cursor:pointer;
 }
 
-input[type=file]{display:none}
+button:hover{background:#222}
 
-.small{font-size:12px;color:#888;margin-top:6px}
-.error{color:#ff4d4d;font-size:13px;margin-top:8px}
+img,video{max-width:250px;margin-top:6px}
 </style>
 </head>
 
 <body>
 
 <header>
-<h1>Admin Panel</h1>
+<div>Admin</div>
 <button onclick="logout()">Logout</button>
 </header>
 
 <div class="container">
 
-<!-- LOGIN -->
-<div id="loginBox">
-<h2>Login</h2>
-<input type="password" id="pass" placeholder="password">
-<button onclick="login()">Login</button>
-</div>
+<div class="left" id="list"></div>
 
-<!-- PANEL -->
-<div id="panel" class="hidden">
-
-<h2>Create Thread</h2>
-
-<textarea id="newText"></textarea>
-
-<label class="file-btn">
-Attach Media
-<input type="file" id="newFile" accept="image/*,video/*" onchange="showFileName()">
-</label>
-
-<div id="fileStatus" class="small"></div>
-<div id="errorBox" class="error"></div>
-
-<button onclick="createThread()">Post Thread</button>
-<button onclick="load()">Refresh</button>
-
-<div id="threads"></div>
-
+<div class="right" id="view">
+<h3>Select a thread</h3>
 </div>
 
 </div>
@@ -155,251 +93,147 @@ Attach Media
 <script>
 
 let token = localStorage.getItem("adminToken")
+let current = null
 
 /* =========================
-   ERROR
+   LOAD THREAD LIST
 ========================= */
-function showError(msg){
-document.getElementById("errorBox").innerText = msg || ""
+
+async function load(){
+let res = await fetch("/admin/threads",{headers:{"x-admin-token":token}})
+let data = await res.json()
+
+list.innerHTML=""
+
+data.forEach(t=>{
+let div = document.createElement("div")
+div.className="thread"
+
+div.innerHTML = `
+<strong>${t.text.slice(0,40)}</strong><br>
+<span class="badge">pending: ${t.pendingCount} | replies: ${t.replyCount}</span>
+`
+
+div.onclick = ()=>openThread(t.id)
+
+list.appendChild(div)
+})
+}
+
+/* =========================
+   OPEN THREAD (lazy load)
+========================= */
+
+async function openThread(id){
+let res = await fetch(`/admin/thread/${id}`,{
+headers:{"x-admin-token":token}
+})
+
+current = await res.json()
+renderThread()
+}
+
+/* =========================
+   RENDER THREAD
+========================= */
+
+function renderThread(){
+let t = current
+
+let media = ""
+if(t.media){
+media = t.media.includes("mp4")
+? `<video controls src="${t.media}"></video>`
+: `<img src="${t.media}">`
+}
+
+view.innerHTML = `
+<h3>Thread</h3>
+<p>${t.text}</p>
+${media}
+
+<button onclick="delThread('${t.id}')">Delete</button>
+
+<hr>
+
+<h3>Pending</h3>
+<div id="pending"></div>
+
+<h3>Approved</h3>
+<div id="approved"></div>
+`
+
+let p = document.getElementById("pending")
+t.pendingReplies.forEach(r=>{
+p.innerHTML += `
+<div class="reply">
+${r.text}<br>
+${renderMedia(r.media)}
+<br>
+<button onclick="approve('${t.id}','${r.id}')">Approve</button>
+<button onclick="reject('${t.id}','${r.id}')">Reject</button>
+</div>
+`
+})
+
+let a = document.getElementById("approved")
+t.replies.forEach(r=>{
+a.innerHTML += `
+<div class="reply">
+${r.text}<br>
+${renderMedia(r.media)}
+</div>
+`
+})
+}
+
+function renderMedia(m){
+if(!m) return ""
+if(m.includes("mp4")) return `<video controls src="${m}"></video>`
+return `<img src="${m}">`
+}
+
+/* =========================
+   ACTIONS
+========================= */
+
+async function approve(tid,rid){
+await fetch(`/admin/thread/${tid}/reply/${rid}/approve`,{
+method:"POST",
+headers:{"x-admin-token":token}
+})
+openThread(tid)
+load()
+}
+
+async function reject(tid,rid){
+await fetch(`/admin/thread/${tid}/reply/${rid}`,{
+method:"DELETE",
+headers:{"x-admin-token":token}
+})
+openThread(tid)
+load()
+}
+
+async function delThread(id){
+await fetch(`/admin/thread/${id}`,{
+method:"DELETE",
+headers:{"x-admin-token":token}
+})
+view.innerHTML="deleted"
+load()
 }
 
 /* =========================
    AUTH
 ========================= */
-async function login(){
-let res = await fetch("/admin/login",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({password:pass.value})
-})
-
-let data = await res.json()
-
-if(data.token){
-token = data.token
-localStorage.setItem("adminToken",token)
-loginBox.classList.add("hidden")
-panel.classList.remove("hidden")
-load()
-}else{
-alert("login failed")
-}
-}
 
 function logout(){
 localStorage.removeItem("adminToken")
 location.reload()
 }
 
-/* =========================
-   LOAD THREADS
-========================= */
-async function load(){
-let res = await fetch("/admin/threads",{headers:{"x-admin-token":token}})
-if(res.status===403){alert("not logged in");return}
-
-let data = await res.json()
-render(data)
-}
-
-/* =========================
-   RENDER
-========================= */
-function render(data){
-threads.innerHTML=""
-
-data.forEach(t=>{
-let div = document.createElement("div")
-div.className="thread"
-
-let media=""
-if(t.media){
-if(t.media.includes("mp4")){
-media = `<video controls src="${t.media}" style="max-width:250px;margin-top:10px"></video>`
-}else{
-media = `<img src="${t.media}" style="max-width:250px;margin-top:10px">`
-}
-}
-
-/* =========================
-   PENDING REPLIES
-========================= */
-let pendingHTML = ""
-if(t.pendingReplies && t.pendingReplies.length){
-pendingHTML = `
-<div class="replyBox">
-<strong style="color:#ffcc00">Pending Replies (${t.pendingReplies.length})</strong>
-`
-
-t.pendingReplies.forEach(r=>{
-pendingHTML += `
-<div class="reply">
-${escape(r.text)}
-<small>${new Date(r.time).toLocaleString()}</small>
-
-<button onclick="approveReply('${t.id}','${r.id}')">Approve</button>
-<button onclick="delReply('${t.id}','${r.id}')">Reject</button>
-</div>
-`
-})
-
-pendingHTML += `</div>`
-}
-
-/* =========================
-   APPROVED REPLIES
-========================= */
-let approvedHTML = ""
-if(t.replies && t.replies.length){
-approvedHTML = `
-<div class="replyBox">
-<strong>Approved Replies (${t.replies.length})</strong>
-`
-
-t.replies.forEach(r=>{
-approvedHTML += `
-<div class="reply">
-${escape(r.text)}
-<small>${new Date(r.time).toLocaleString()}</small>
-
-<button onclick="delReply('${t.id}','${r.id}')">Delete</button>
-</div>
-`
-})
-
-approvedHTML += `</div>`
-}
-
-/* =========================
-   THREAD HTML
-========================= */
-div.innerHTML = `
-<div class="meta">
-ID: ${t.id}<br>
-Anonymous • ${new Date(t.time).toLocaleTimeString()}
-</div>
-
-<p>${escape(t.text)}</p>
-${media}
-
-<div class="actions">
-<button onclick="del('${t.id}')">Delete Thread</button>
-<button onclick="pin('${t.id}')">Pin Top</button>
-<button onclick="bottom('${t.id}')">Move Bottom</button>
-</div>
-
-${pendingHTML}
-${approvedHTML}
-`
-
-threads.appendChild(div)
-})
-}
-
-/* =========================
-   CREATE THREAD
-========================= */
-async function createThread(){
-showError("")
-
-let fd = new FormData()
-fd.append("text",newText.value)
-
-let file = newFile.files[0]
-if(file) fd.append("media",file)
-
-try{
-let res = await fetch("/admin/thread",{
-method:"POST",
-headers:{"x-admin-token":token},
-body:fd
-})
-
-let text = await res.text()
-let data
-
-try{ data = JSON.parse(text) }
-catch(e){ throw new Error(text || "server error") }
-
-if(!res.ok){
-showError(data.error || "failed")
-return
-}
-
-newText.value=""
-newFile.value=""
-fileStatus.innerText=""
-load()
-
-}catch(e){
-showError(e.message || "network error")
-}
-}
-
-/* =========================
-   THREAD ACTIONS
-========================= */
-async function del(id){
-await fetch(`/admin/thread/${id}`,{
-method:"DELETE",
-headers:{"x-admin-token":token}
-})
-load()
-}
-
-async function pin(id){
-await fetch(`/admin/thread/${id}/pin`,{
-method:"POST",
-headers:{"x-admin-token":token}
-})
-load()
-}
-
-async function bottom(id){
-await fetch(`/admin/thread/${id}/bottom`,{
-method:"POST",
-headers:{"x-admin-token":token}
-})
-load()
-}
-
-/* =========================
-   REPLY MODERATION
-========================= */
-async function approveReply(threadId, replyId){
-await fetch(`/admin/thread/${threadId}/reply/${replyId}/approve`,{
-method:"POST",
-headers:{"x-admin-token":token}
-})
-load()
-}
-
-async function delReply(threadId, replyId){
-await fetch(`/admin/thread/${threadId}/reply/${replyId}`,{
-method:"DELETE",
-headers:{"x-admin-token":token}
-})
-load()
-}
-
-/* =========================
-   HELPERS
-========================= */
-function showFileName(){
-let file = newFile.files[0]
-fileStatus.innerText = file ? ("Ready: " + file.name) : ""
-}
-
-function escape(x){
-return x ? x.replaceAll("&","&amp;").replaceAll("<","&lt;") : ""
-}
-
-/* AUTO LOGIN */
-if(token){
-loginBox.classList.add("hidden")
-panel.classList.remove("hidden")
-load()
-}
+if(token) load()
 
 </script>
 
