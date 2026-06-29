@@ -6,133 +6,31 @@
 <title>Anonymous Board</title>
 
 <style>
-body{
-margin:0;
-background:#050505;
-color:#ddd;
-font-family:Arial;
-}
-
-header{
-background:#0d0d0d;
-padding:16px;
-display:flex;
-justify-content:space-between;
-border-bottom:1px solid #222;
-align-items:center;
-}
-
+body{margin:0;background:#050505;color:#ddd;font-family:Arial}
+header{background:#0d0d0d;padding:16px;display:flex;justify-content:space-between;border-bottom:1px solid #222;align-items:center}
 .logo{font-weight:bold;color:#ccc}
-
-#newsBanner{
-background:#111;
-border-bottom:1px solid #2a2a2a;
-padding:10px 16px;
-color:#aaa;
-font-size:13px;
-}
-
-.container{
-max-width:1400px;
-margin:auto;
-padding:20px;
-}
-
-.grid{
-display:grid;
-grid-template-columns:repeat(4,1fr);
-gap:12px;
-}
-
+#newsBanner{background:#111;border-bottom:1px solid #2a2a2a;padding:10px 16px;color:#aaa;font-size:13px}
+.container{max-width:1400px;margin:auto;padding:20px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 @media(max-width:1200px){.grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:800px){.grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:500px){.grid{grid-template-columns:repeat(1,1fr)}}
-
-.thread{
-background:#111;
-border:1px solid #2a2a2a;
-border-radius:10px;
-cursor:pointer;
-overflow:hidden;
-transition:0.15s;
-min-height:120px;
-}
-
+.thread{background:#111;border:1px solid #2a2a2a;border-radius:10px;cursor:pointer;overflow:hidden;transition:0.15s;min-height:120px}
 .thread:hover{background:#151515;transform:scale(1.01)}
-
-.thumb{
-width:100%;
-height:160px;
-object-fit:cover;
-background:#000;
-display:block;
-}
-
+.thumb{width:100%;height:160px;object-fit:cover;background:#000;display:block}
 .meta{font-size:12px;color:#888;padding:8px 10px 0}
-
 .text{padding:8px 10px;font-size:14px}
-
-.modal{
-display:none;
-position:fixed;
-inset:0;
-background:#000;
-overflow:auto;
-}
-
-.board{
-max-width:900px;
-margin:auto;
-padding:20px;
-}
-
-.post{
-background:#111;
-border:1px solid #2a2a2a;
-padding:14px;
-margin-bottom:10px;
-border-radius:10px;
-}
-
+.modal{display:none;position:fixed;inset:0;background:#000;overflow:auto}
+.board{max-width:900px;margin:auto;padding:20px}
+.post{background:#111;border:1px solid #2a2a2a;padding:14px;margin-bottom:10px;border-radius:10px}
 .media{max-width:320px;margin-top:10px;border-radius:10px}
-
-textarea,input{
-width:100%;
-background:#050505;
-border:1px solid #333;
-color:#ddd;
-padding:10px;
-margin-top:10px;
-border-radius:10px;
-}
-
-.file-btn{
-display:inline-block;
-margin-top:10px;
-padding:10px 14px;
-border:1px solid #333;
-border-radius:14px;
-background:#1a1a1a;
-cursor:pointer;
-}
-
+textarea,input{width:100%;background:#050505;border:1px solid #333;color:#ddd;padding:10px;margin-top:10px;border-radius:10px}
+.file-btn{display:inline-block;margin-top:10px;padding:10px 14px;border:1px solid #333;border-radius:14px;background:#1a1a1a;cursor:pointer}
 input[type=file]{display:none}
-
-button{
-background:#1a1a1a;
-border:1px solid #333;
-color:#ddd;
-padding:10px 14px;
-border-radius:14px;
-cursor:pointer;
-margin-top:10px;
-}
-
+button{background:#1a1a1a;border:1px solid #333;color:#ddd;padding:10px 14px;border-radius:14px;cursor:pointer;margin-top:10px}
 button:hover{background:#262626}
-
 .small{font-size:12px;color:#888;margin-top:6px}
 .error{color:#ff4d4d;font-size:13px;margin-top:8px}
-
 </style>
 </head>
 
@@ -149,7 +47,6 @@ button:hover{background:#262626}
 <div class="grid" id="threads"></div>
 </div>
 
-<!-- MODAL -->
 <div class="modal" id="viewModal">
 <div class="board">
 
@@ -178,41 +75,37 @@ Attach Media
 <script>
 
 let threads = []
-let current = null
+let currentId = null
 
 const threadsBox = document.getElementById("threads")
 const modal = document.getElementById("viewModal")
-
 const threadView = document.getElementById("threadView")
 const replyBox = document.getElementById("replyBox")
-
 const replyText = document.getElementById("replyText")
 const replyFile = document.getElementById("replyFile")
 const replyBtn = document.getElementById("replyBtn")
 const fileStatus = document.getElementById("fileStatus")
 const errorBox = document.getElementById("errorBox")
 
-/* =========================
-   LOAD THREADS
-========================= */
-
-async function load(){
-let res = await fetch("/threads")
-threads = await res.json()
-renderThreads()
+function esc(x){
+return (x||"").replaceAll("&","&amp;").replaceAll("<","&lt;")
 }
 
-/* =========================
-   RENDER THREADS
-========================= */
+async function load(){
+let r = await fetch("/threads")
+let d = await r.json()
+threads = Array.isArray(d) ? d : []
+render()
+}
 
-function renderThreads(){
-threadsBox.innerHTML = ""
+function render(){
+threadsBox.innerHTML=""
 
-for(let t of threads){
+threads.forEach(t=>{
+t.replies = t.replies || []
 
 let div = document.createElement("div")
-div.className = "thread"
+div.className="thread"
 
 let media = ""
 if(t.media){
@@ -224,147 +117,108 @@ media = t.media.includes("mp4")
 div.innerHTML = `
 ${media}
 <div class="meta">Anonymous • ${new Date(t.time).toLocaleTimeString()}</div>
-<div class="text">${escape(t.text)}</div>
+<div class="text">${esc(t.text)}</div>
 <div class="meta">${t.replies.length} replies</div>
 `
 
 div.onclick = ()=>openThread(t.id)
 
 threadsBox.appendChild(div)
+})
 }
-}
-
-/* =========================
-   OPEN THREAD
-========================= */
 
 function openThread(id){
-current = threads.find(t => t.id === id)
-if(!current) return
+currentId = id
+let t = threads.find(x=>x.id===id)
+if(!t) return
 
-modal.style.display = "block"
+modal.style.display="block"
 
 threadView.innerHTML = `
 <div class="post">
-<div class="meta">Anonymous • ${new Date(current.time).toLocaleTimeString()}</div>
-<p>${escape(current.text)}</p>
-${current.media ? (current.media.includes("mp4")
-? `<video class="media" controls src="${current.media}"></video>`
-: `<img class="media" src="${current.media}">`) : ""}
+<div class="meta">Anonymous • ${new Date(t.time).toLocaleTimeString()}</div>
+<p>${esc(t.text)}</p>
+${t.media ? (t.media.includes("mp4")
+? `<video class="media" controls src="${t.media}"></video>`
+: `<img class="media" src="${t.media}">`) : ""}
 </div>
 `
 
 renderReplies()
 }
 
-/* =========================
-   CLOSE
-========================= */
-
-function closeView(){
-modal.style.display = "none"
-
-threadView.innerHTML = ""
-replyBox.innerHTML = ""
-
-replyText.value = ""
-replyFile.value = ""
-fileStatus.innerText = ""
-errorBox.innerText = ""
-
-current = null
-}
-
-/* =========================
-   REPLIES
-========================= */
-
 function renderReplies(){
-if(!current) return
+let t = threads.find(x=>x.id===currentId)
+if(!t) return
 
-replyBox.innerHTML = ""
+replyBox.innerHTML=""
 
-let sorted = [...current.replies].sort((a,b)=>new Date(b.time)-new Date(a.time))
+let list = [...(t.replies||[])].sort((a,b)=>new Date(b.time)-new Date(a.time))
 
-for(let r of sorted){
+list.forEach(r=>{
 let div = document.createElement("div")
-div.className = "post"
+div.className="post"
 
 div.innerHTML = `
 <div class="meta">Anonymous • ${new Date(r.time).toLocaleTimeString()}</div>
-<p>${escape(r.text)}</p>
+<p>${esc(r.text)}</p>
 ${r.media ? (r.media.includes("mp4")
 ? `<video class="media" controls src="${r.media}"></video>`
 : `<img class="media" src="${r.media}">`) : ""}
 `
 
 replyBox.appendChild(div)
-}
+})
 }
 
-/* =========================
-   SEND REPLY (FIXED)
-========================= */
+function closeView(){
+modal.style.display="none"
+threadView.innerHTML=""
+replyBox.innerHTML=""
+replyText.value=""
+replyFile.value=""
+fileStatus.innerText=""
+errorBox.innerText=""
+currentId=null
+}
 
 async function sendReply(){
+if(!currentId) return
 
-errorBox.innerText = ""
+errorBox.innerText=""
+replyBtn.disabled=true
+fileStatus.innerText="Uploading..."
 
-if(!current) return
+let fd=new FormData()
+fd.append("text",replyText.value||"")
+if(replyFile.files[0]) fd.append("media",replyFile.files[0])
 
-let file = replyFile.files[0]
-
-replyBtn.disabled = true
-fileStatus.innerText = "Uploading..."
-
-let fd = new FormData()
-fd.append("text", replyText.value)
-if(file) fd.append("media", file)
-
-try{
-
-let res = await fetch(`/threads/${current.id}/reply`,{
+let r=await fetch(`/threads/${currentId}/reply`,{
 method:"POST",
 body:fd
 })
 
-let data = await res.json()
+let d=await r.json()
 
-replyBtn.disabled = false
+replyBtn.disabled=false
 
-if(!res.ok){
-errorBox.innerText = data.error || "error"
-fileStatus.innerText = ""
+if(!r.ok){
+errorBox.innerText=d.error||"error"
+fileStatus.innerText=""
 return
 }
 
-/* 🔥 FIX: re-fetch thread from server so admin sees it */
+replyText.value=""
+replyFile.value=""
+fileStatus.innerText=""
+
 await load()
-
-current = threads.find(t => t.id === current.id)
 renderReplies()
-
-replyText.value = ""
-replyFile.value = ""
-fileStatus.innerText = ""
-
-}catch(e){
-replyBtn.disabled = false
-errorBox.innerText = "network error"
 }
-}
-
-/* =========================
-   HELPERS
-========================= */
 
 function onFileSelect(){
-let f = replyFile.files[0]
-fileStatus.innerText = f ? ("Ready: " + f.name) : ""
-}
-
-function escape(x){
-return x ? x.replaceAll("&","&amp;").replaceAll("<","&lt;") : ""
+let f=replyFile.files[0]
+fileStatus.innerText=f?("Ready: "+f.name):""
 }
 
 load()
