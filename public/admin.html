@@ -87,34 +87,16 @@ border-radius:8px;
 font-size:13px;
 }
 
-.reply small{
-color:#888;
-display:block;
-margin-top:4px;
-}
-
 .hidden{display:none}
-
-.file-btn{
-display:inline-block;
-margin-top:10px;
-padding:10px 14px;
-border:1px solid #333;
-border-radius:12px;
-background:#1a1a1a;
-cursor:pointer;
-}
-
-input[type=file]{display:none}
-
-.small{font-size:12px;color:#888;margin-top:6px}
-.error{color:#ff4d4d;font-size:13px;margin-top:8px}
 
 img,video{
 max-width:250px;
 margin-top:8px;
 border-radius:8px;
 }
+
+.small{font-size:12px;color:#888;margin-top:6px}
+.error{color:#ff4d4d;font-size:13px;margin-top:8px}
 </style>
 </head>
 
@@ -127,14 +109,12 @@ border-radius:8px;
 
 <div class="container">
 
-<!-- LOGIN -->
 <div id="loginBox">
 <h2>Login</h2>
 <input type="password" id="pass" placeholder="password">
 <button onclick="login()">Login</button>
 </div>
 
-<!-- PANEL -->
 <div id="panel" class="hidden">
 
 <h2>Create Thread</h2>
@@ -160,13 +140,11 @@ Attach Media
 
 <script>
 
-/* FIXED DOM REFERENCES */
 let token = localStorage.getItem("adminToken")
 
 const loginBox = document.getElementById("loginBox")
 const panel = document.getElementById("panel")
-
-const threads = document.getElementById("threads")
+const threadsBox = document.getElementById("threads")
 
 const pass = document.getElementById("pass")
 const newText = document.getElementById("newText")
@@ -174,15 +152,15 @@ const newFile = document.getElementById("newFile")
 const fileStatus = document.getElementById("fileStatus")
 const errorBox = document.getElementById("errorBox")
 
-/* =========================
-   ERROR
-========================= */
+/* STORE OPEN THREADS (NEW) */
+let openReplies = {}
+
 function showError(msg){
 errorBox.innerText = msg || ""
 }
 
 /* =========================
-   AUTH
+   LOGIN
 ========================= */
 async function login(){
 let res = await fetch("/admin/login",{
@@ -210,90 +188,54 @@ location.reload()
 }
 
 /* =========================
-   LOAD THREADS
+   LOAD
 ========================= */
 async function load(){
 let res = await fetch("/admin/threads",{headers:{"x-admin-token":token}})
-if(res.status===403){alert("not logged in");return}
-
 let data = await res.json()
 render(data)
 }
 
 /* =========================
-   RENDER (UNCHANGED UX)
+   TOGGLE REPLIES (NEW CORE FIX)
+========================= */
+async function toggleReplies(threadId){
+
+if(openReplies[threadId]){
+delete openReplies[threadId]
+render(await fetchData())
+return
+}
+
+openReplies[threadId] = true
+render(await fetchData())
+}
+
+async function fetchData(){
+let res = await fetch("/admin/threads",{headers:{"x-admin-token":token}})
+return await res.json()
+}
+
+/* =========================
+   RENDER (NOW LAZY)
 ========================= */
 function render(data){
-threads.innerHTML=""
+threadsBox.innerHTML=""
 
 data.forEach(t=>{
+
 let div = document.createElement("div")
 div.className="thread"
 
-/* MEDIA PREVIEW (IMPORTANT FOR YOU TO SEE WHAT YOU APPROVE) */
 let media=""
 if(t.media){
-if(t.media.includes("mp4")){
-media = `<video controls src="${t.media}"></video>`
-}else{
-media = `<img src="${t.media}">`
-}
+media = t.media.includes("mp4")
+? `<video controls src="${t.media}"></video>`
+: `<img src="${t.media}">`
 }
 
-/* PENDING REPLIES */
-let pendingHTML = ""
-if(t.pendingReplies && t.pendingReplies.length){
-pendingHTML = `
-<div class="replyBox">
-<strong style="color:#ffcc00">Pending Replies (${t.pendingReplies.length})</strong>
-`
+let isOpen = openReplies[t.id]
 
-t.pendingReplies.forEach(r=>{
-pendingHTML += `
-<div class="reply">
-${escape(r.text)}
-<small>${new Date(r.time).toLocaleString()}</small>
-
-${r.media ? (r.media.includes("mp4")
-? `<video controls src="${r.media}"></video>`
-: `<img src="${r.media}">`) : ""}
-
-<button onclick="approveReply('${t.id}','${r.id}')">Approve</button>
-<button onclick="delReply('${t.id}','${r.id}')">Reject</button>
-</div>
-`
-})
-
-pendingHTML += `</div>`
-}
-
-/* APPROVED REPLIES */
-let approvedHTML = ""
-if(t.replies && t.replies.length){
-approvedHTML = `
-<div class="replyBox">
-<strong>Approved Replies (${t.replies.length})</strong>
-`
-
-t.replies.forEach(r=>{
-approvedHTML += `
-<div class="reply">
-${escape(r.text)}
-<small>${new Date(r.time).toLocaleString()}</small>
-
-${r.media ? (r.media.includes("mp4")
-? `<video controls src="${r.media}"></video>`
-: `<img src="${r.media}">`) : ""}
-
-<button onclick="delReply('${t.id}','${r.id}')">Delete</button>
-</div>
-`
-})
-
-approvedHTML += `</div>`
-}
-
-/* THREAD */
 div.innerHTML = `
 <div class="meta">
 ID: ${t.id}<br>
@@ -307,96 +249,107 @@ ${media}
 <button onclick="del('${t.id}')">Delete Thread</button>
 <button onclick="pin('${t.id}')">Pin Top</button>
 <button onclick="bottom('${t.id}')">Move Bottom</button>
+
+<button onclick="toggleReplies('${t.id}')">
+${isOpen ? "Collapse" : "Expand"} Replies
+(${t.pendingReplies.length + t.replies.length})
+</button>
 </div>
 
-${pendingHTML}
-${approvedHTML}
+<div id="box-${t.id}" class="${isOpen ? '' : 'hidden'} replyBox"></div>
 `
 
-threads.appendChild(div)
+threadsBox.appendChild(div)
+
+if(isOpen){
+renderReplies(t)
+}
 })
 }
 
 /* =========================
-   CREATE THREAD
+   RENDER REPLIES ONLY WHEN OPEN
 ========================= */
-async function createThread(){
-showError("")
+function renderReplies(t){
 
-let fd = new FormData()
-fd.append("text",newText.value)
+let box = document.getElementById("box-" + t.id)
+if(!box) return
 
-let file = newFile.files[0]
-if(file) fd.append("media",file)
+box.innerHTML = ""
 
-let res = await fetch("/admin/thread",{
-method:"POST",
-headers:{"x-admin-token":token},
-body:fd
-})
+let html = `<strong style="color:#ffcc00">Pending</strong>`
 
-let data = await res.json()
+for(let r of t.pendingReplies){
+html += `
+<div class="reply">
+${escape(r.text)}
+<small>${new Date(r.time).toLocaleString()}</small>
 
-if(!res.ok){
-showError(data.error || "failed")
-return
+${media(r.media)}
+
+<button onclick="approveReply('${t.id}','${r.id}')">Approve</button>
+<button onclick="delReply('${t.id}','${r.id}')">Reject</button>
+</div>
+`
 }
 
-newText.value=""
-newFile.value=""
-fileStatus.innerText=""
-load()
+html += `<strong>Approved</strong>`
+
+for(let r of t.replies){
+html += `
+<div class="reply">
+${escape(r.text)}
+<small>${new Date(r.time).toLocaleString()}</small>
+
+${media(r.media)}
+
+<button onclick="delReply('${t.id}','${r.id}')">Delete</button>
+</div>
+`
+}
+
+box.innerHTML = html
 }
 
 /* =========================
-   THREAD ACTIONS
+   MEDIA HELPER
+========================= */
+function media(m){
+if(!m) return ""
+return m.includes("mp4")
+? `<video controls src="${m}"></video>`
+: `<img src="${m}">`
+}
+
+/* =========================
+   ACTIONS
 ========================= */
 async function del(id){
-await fetch(`/admin/thread/${id}`,{
-method:"DELETE",
-headers:{"x-admin-token":token}
-})
+await fetch(`/admin/thread/${id}`,{method:"DELETE",headers:{"x-admin-token":token}})
 load()
 }
 
 async function pin(id){
-await fetch(`/admin/thread/${id}/pin`,{
-method:"POST",
-headers:{"x-admin-token":token}
-})
+await fetch(`/admin/thread/${id}/pin`,{method:"POST",headers:{"x-admin-token":token}})
 load()
 }
 
 async function bottom(id){
-await fetch(`/admin/thread/${id}/bottom`,{
-method:"POST",
-headers:{"x-admin-token":token}
-})
+await fetch(`/admin/thread/${id}/bottom`,{method:"POST",headers:{"x-admin-token":token}})
 load()
 }
 
-/* =========================
-   REPLY MODERATION
-========================= */
-async function approveReply(threadId, replyId){
-await fetch(`/admin/thread/${threadId}/reply/${replyId}/approve`,{
-method:"POST",
-headers:{"x-admin-token":token}
-})
+async function approveReply(tid,rid){
+await fetch(`/admin/thread/${tid}/reply/${rid}/approve`,{method:"POST",headers:{"x-admin-token":token}})
 load()
 }
 
-async function delReply(threadId, replyId){
-await fetch(`/admin/thread/${threadId}/reply/${replyId}`,{
-method:"DELETE",
-headers:{"x-admin-token":token}
-})
+async function delReply(tid,rid){
+await fetch(`/admin/thread/${tid}/reply/${rid}`,{method:"DELETE",headers:{"x-admin-token":token}})
 load()
 }
 
-/* =========================
-   HELPERS
-========================= */
+/* HELPERS */
 function escape(x){
 return x ? x.replaceAll("&","&amp;").replaceAll("<","&lt;") : ""
 }
