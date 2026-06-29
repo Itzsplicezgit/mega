@@ -37,7 +37,7 @@ color:#aaa;
 font-size:13px;
 }
 
-/* GRID LIKE YOUTUBE */
+/* GRID */
 .container{
 max-width:1400px;
 margin:auto;
@@ -50,17 +50,9 @@ grid-template-columns:repeat(4, 1fr);
 gap:12px;
 }
 
-@media(max-width:1200px){
-.grid{grid-template-columns:repeat(3,1fr);}
-}
-
-@media(max-width:800px){
-.grid{grid-template-columns:repeat(2,1fr);}
-}
-
-@media(max-width:500px){
-.grid{grid-template-columns:repeat(1,1fr);}
-}
+@media(max-width:1200px){ .grid{grid-template-columns:repeat(3,1fr);} }
+@media(max-width:800px){ .grid{grid-template-columns:repeat(2,1fr);} }
+@media(max-width:500px){ .grid{grid-template-columns:repeat(1,1fr);} }
 
 .thread{
 background:#111;
@@ -76,7 +68,7 @@ background:#151515;
 transform:scale(1.01);
 }
 
-/* FIXED MEDIA THUMBNAIL (CROPPED LIKE YOUTUBE) */
+/* THUMBNAIL */
 .thumb{
 width:100%;
 height:180px;
@@ -126,6 +118,7 @@ border-radius:10px;
 display:block;
 }
 
+/* INPUTS */
 textarea,input{
 width:100%;
 background:#050505;
@@ -150,6 +143,7 @@ input[type=file]{display:none}
 
 .small{font-size:12px;color:#888;margin-top:6px}
 .error{color:#ff4d4d;font-size:13px;margin-top:8px}
+
 button{
 background:#1a1a1a;
 border:1px solid #333;
@@ -189,17 +183,17 @@ button:hover{background:#262626}
 
 <div id="replyBox"></div>
 
-<textarea id="replyText"></textarea>
+<textarea id="replyText" placeholder="Write a reply..."></textarea>
 
 <label class="file-btn">
 Attach Media
-<input type="file" id="replyFile" accept="image/*,video/*">
+<input type="file" id="replyFile" accept="image/*,video/*" onchange="onFileSelect()">
 </label>
 
 <div id="fileStatus" class="small"></div>
 <div id="errorBox" class="error"></div>
 
-<button onclick="sendReply()">Reply</button>
+<button onclick="sendReply()" id="replyBtn">Reply</button>
 
 </div>
 </div>
@@ -210,21 +204,20 @@ Attach Media
 let threads=[]
 let current=null
 
-/* NEWS BANNER (future API hook ready) */
-let newsText = "Welcome to the board."
-document.getElementById("newsBanner").innerText = newsText
+document.getElementById("newsBanner").innerText = "Welcome to the board."
 
 function showError(msg){
 document.getElementById("errorBox").innerText = msg || ""
 }
 
+/* LOAD THREADS */
 async function load(){
 let res = await fetch("/threads")
 threads = await res.json()
 render()
 }
 
-/* GRID RENDER */
+/* GRID */
 function render(){
 let box = document.getElementById("threads")
 box.innerHTML = ""
@@ -254,7 +247,7 @@ box.appendChild(div)
 })
 }
 
-/* THREAD OPEN */
+/* OPEN THREAD */
 function openThread(t){
 current = t
 document.getElementById("viewModal").style.display = "block"
@@ -277,10 +270,12 @@ function closeView(){
 document.getElementById("viewModal").style.display = "none"
 current = null
 replyFile.value = ""
+replyText.value = ""
+fileStatus.innerText = ""
 showError("")
 }
 
-/* REPLIES (UNCHANGED STYLE) */
+/* REPLIES */
 function renderReplies(){
 let box = document.getElementById("replyBox")
 box.innerHTML = ""
@@ -305,15 +300,35 @@ box.appendChild(div)
 })
 }
 
-/* REPLY */
+/* =========================
+   FILE STATUS (NEW)
+========================= */
+function onFileSelect(){
+let file = replyFile.files[0]
+
+if(!file){
+fileStatus.innerText = ""
+return
+}
+
+fileStatus.innerText = "Ready: " + file.name
+}
+
+/* =========================
+   REPLY SEND (WITH UPLOAD FEEDBACK)
+========================= */
 async function sendReply(){
 showError("")
 
 let file = replyFile.files[0]
+
 if(!file){
 showError("File required")
 return
 }
+
+document.getElementById("replyBtn").disabled = true
+fileStatus.innerText = "Uploading..."
 
 let fd = new FormData()
 fd.append("text", replyText.value)
@@ -327,23 +342,29 @@ body:fd
 
 let data = await res.json()
 
+document.getElementById("replyBtn").disabled = false
+
 if(!res.ok){
 showError(data.error || "Error")
+fileStatus.innerText = ""
 return
 }
 
 replyText.value = ""
 replyFile.value = ""
-document.getElementById("fileStatus").innerText = ""
+fileStatus.innerText = ""
 
 current = data.thread
 renderReplies()
 
 }catch(e){
+document.getElementById("replyBtn").disabled = false
+fileStatus.innerText = ""
 showError("Network error")
 }
 }
 
+/* ESCAPE */
 function escape(x){
 return x ? x.replaceAll("&","&amp;").replaceAll("<","&lt;") : ""
 }
