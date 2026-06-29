@@ -15,20 +15,20 @@ fs.mkdirSync("uploads")
 }
 
 /* =========================
-   DATA STORE
+   STATE
 ========================= */
 
 let threads = []
 
-const replyCooldown = {}
 const adminSessions = {}
 const adminFailCooldown = {}
+const replyCooldown = {}
 
 const MAX_THREADS = 500
 const MAX_REPLIES = 500
 
 /* =========================
-   STORAGE
+   UPLOADS
 ========================= */
 
 function storageEngine(){
@@ -69,12 +69,12 @@ function canReply(id){
 return !replyCooldown[id] || now() - replyCooldown[id] > 30000
 }
 
-function canAdminTry(id){
-return !adminFailCooldown[id] || now() - adminFailCooldown[id] > 30000
-}
-
 function isAdmin(req){
 return adminSessions[req.headers["x-admin-token"]]
+}
+
+function findThread(id){
+return threads.find(t => t.id === id)
 }
 
 function trimThreads(){
@@ -89,29 +89,26 @@ t.replies = t.replies.slice(-MAX_REPLIES)
 }
 }
 
-function findThread(id){
-return threads.find(t => t.id === id)
-}
-
 /* =========================
-   PUBLIC API
+   PUBLIC THREAD VIEW
 ========================= */
 
-/* GET THREADS */
 app.get("/threads",(req,res)=>{
 res.json(threads)
 })
 
-/* POST REPLY (PUBLIC ALLOWED) */
+/* =========================
+   USER REPLY -> PENDING
+========================= */
+
 app.post("/threads/:id/reply",(req,res)=>{
 userUpload.single("media")(req,res,err=>{
 try{
 if(err){
-return res.status(400).json({error:"file too large (max 10MB)"})
+return res.status(400).json({error:"file too large"})
 }
 
 const user = ip(req)
-
 if(!canReply(user)){
 return res.status(429).json({error:"slow"})
 }
@@ -122,18 +119,18 @@ return res.status(404).json({error:"not found"})
 }
 
 const reply = {
-id: crypto.randomUUID(),   // <-- needed for delete feature
+id: crypto.randomUUID(),
 text: req.body.text || "",
 media: req.file ? "/uploads/" + req.file.filename : "",
 time: new Date().toISOString()
 }
 
-t.replies.push(reply)
-trimReplies(t)
+/* 👇 goes to pending first */
+t.pendingReplies.push(reply)
 
 replyCooldown[user] = now()
 
-res.json({ok:true, thread:t})
+res.json({ok:true, pending:true})
 
 }catch(e){
 res.status(500).json({error:"server error"})
@@ -148,8 +145,8 @@ res.status(500).json({error:"server error"})
 app.post("/admin/login",(req,res)=>{
 const user = ip(req)
 
-if(!canAdminTry(user)){
-return res.status(429).json({error:"cooldown"})
+if(!adminFailCooldown[user] || now()-adminFailCooldown[user] > 30000){
+adminFailCooldown[user] = 0
 }
 
 const {password} = req.body
@@ -177,7 +174,6 @@ return true
    ADMIN THREADS
 ========================= */
 
-/* CREATE THREAD (ADMIN ONLY) */
 app.post("/admin/thread",(req,res)=>{
 adminUpload.single("media")(req,res,err=>{
 try{
@@ -192,7 +188,8 @@ id: crypto.randomUUID(),
 text: req.body.text || "",
 media: req.file ? "/uploads/" + req.file.filename : "",
 time: new Date().toISOString(),
-replies: [],
+replies: [],          // approved
+pendingReplies: [],   // waiting approval
 pinned: false
 }
 
@@ -207,21 +204,17 @@ res.status(500).json({error:"server error"})
 })
 })
 
-/* GET ADMIN THREADS */
 app.get("/admin/threads",(req,res)=>{
 if(!requireAdmin(req,res)) return
 res.json(threads)
 })
 
-/* DELETE THREAD */
 app.delete("/admin/thread/:id",(req,res)=>{
 if(!requireAdmin(req,res)) return
-
 threads = threads.filter(t => t.id !== req.params.id)
 res.json({ok:true})
 })
 
-/* PIN THREAD */
 app.post("/admin/thread/:id/pin",(req,res)=>{
 if(!requireAdmin(req,res)) return
 
@@ -234,7 +227,6 @@ threads.unshift(t)
 res.json({ok:true})
 })
 
-/* MOVE TO BOTTOM */
 app.post("/admin/thread/:id/bottom",(req,res)=>{
 if(!requireAdmin(req,res)) return
 
@@ -248,21 +240,38 @@ res.json({ok:true})
 })
 
 /* =========================
-   DELETE REPLY (NEW)
+   APPROVE / REJECT REPLIES
 ========================= */
-app.delete("/admin/thread/:threadId/reply/:replyId",(req,res)=>{
+
+app.post("/admin/thread/:id/reply/:rid/approve",(req,res)=>{
 if(!requireAdmin(req,res)) return
 
-const t = findThread(req.params.threadId)
+const t = findThread(req.params.id)
 if(!t) return res.status(404).json({error:"thread not found"})
 
-t.replies = t.replies.filter(r => r.id !== req.params.replyId)
+const idx = t.pendingReplies.findIndex(r => r.id === req.params.rid)
+if(idx === -1) return res.status(404).json({error:"not found"})
+
+const reply = t.pendingReplies.splice(idx,1)[0]
+t.replies.push(reply)
+
+res.json({ok:true})
+})
+
+app.delete("/admin/thread/:id/reply/:rid",(req,res)=>{
+if(!requireAdmin(req,res)) return
+
+const t = findThread(req.params.id)
+if(!t) return res.status(404).json({error:"thread not found"})
+
+t.pendingReplies = t.pendingReplies.filter(r => r.id !== req.params.rid)
+t.replies = t.replies.filter(r => r.id !== req.params.rid)
 
 res.json({ok:true})
 })
 
 /* =========================
-   START SERVER
+   START
 ========================= */
 
 const PORT = process.env.PORT || 3000
