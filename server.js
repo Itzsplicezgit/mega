@@ -28,30 +28,20 @@ const MAX_THREADS = 500
 const MAX_REPLIES = 500
 
 /* =========================
-   50MB UPLOAD LIMIT
+   UPLOADS
 ========================= */
 
 function storageEngine() {
     return multer.diskStorage({
-        destination: (req, file, cb) => {
-            cb(null, "uploads/")
-        },
+        destination: (req, file, cb) => cb(null, "uploads/"),
         filename: (req, file, cb) => {
             const ext = path.extname(file.originalname || "")
-            cb(
-                null,
-                Date.now() + "-" + crypto.randomBytes(6).toString("hex") + ext
-            )
+            cb(null, Date.now() + "-" + crypto.randomBytes(6).toString("hex") + ext)
         }
     })
 }
 
-const userUpload = multer({
-    storage: storageEngine(),
-    limits: { fileSize: 50 * 1024 * 1024 }
-})
-
-const adminUpload = multer({
+const upload = multer({
     storage: storageEngine(),
     limits: { fileSize: 50 * 1024 * 1024 }
 })
@@ -68,17 +58,26 @@ function now() {
     return Date.now()
 }
 
-function canReply(id) {
-    return !replyCooldown[id] || now() - replyCooldown[id] > 10000
+function isAdmin(req) {
+    const token = req.headers["x-admin-token"]
+    return token && adminSessions[token]
 }
 
-function isAdmin(req) {
-    return adminSessions[req.headers["x-admin-token"]]
+function requireAdmin(req, res) {
+    if (!isAdmin(req)) {
+        res.status(403).json({ error: "no" })
+        return false
+    }
+    return true
 }
 
 function findThread(id) {
     return threads.find(t => t.id === id)
 }
+
+/* =========================
+   THREAD LIMITS
+========================= */
 
 function trimThreads() {
     if (threads.length > MAX_THREADS) {
@@ -93,89 +92,11 @@ function trimReplies(t) {
 }
 
 /* =========================
-   PUBLIC THREADS
+   PUBLIC
 ========================= */
 
 app.get("/threads", (req, res) => {
     res.json(threads)
-})
-
-/* =========================
-   ADMIN HELPER
-========================= */
-
-function requireAdmin(req, res) {
-    if (!isAdmin(req)) {
-        res.status(403).json({ error: "no" })
-        return false
-    }
-    return true
-}
-
-/* =========================
-   CREATE THREAD (FIXED)
-   ✔ multer middleware correctly applied
-========================= */
-
-app.post("/admin/thread", adminUpload.single("media"), (req, res) => {
-    try {
-        if (!isAdmin(req)) {
-            return res.status(403).json({ error: "no" })
-        }
-
-        const thread = {
-            id: crypto.randomUUID(),
-            text: req.body.text || "",
-            media: req.file ? "/uploads/" + req.file.filename : "",
-            time: new Date().toISOString(),
-            replies: [],
-            pendingReplies: []
-        }
-
-        threads.unshift(thread)
-        trimThreads()
-
-        res.json(thread)
-    } catch (e) {
-        res.status(500).json({ error: "server error" })
-    }
-})
-
-/* =========================
-   USER REPLY (FIXED)
-========================= */
-
-app.post("/threads/:id/reply", userUpload.single("media"), (req, res) => {
-    try {
-        const user = ip(req)
-
-        if (!canReply(user)) {
-            return res.status(429).json({ error: "slow" })
-        }
-
-        const t = findThread(req.params.id)
-        if (!t) {
-            return res.status(404).json({ error: "not found" })
-        }
-
-        if (!t.replies) t.replies = []
-        if (!t.pendingReplies) t.pendingReplies = []
-
-        const reply = {
-            id: crypto.randomUUID(),
-            text: req.body.text || "",
-            media: req.file ? "/uploads/" + req.file.filename : "",
-            time: new Date().toISOString()
-        }
-
-        t.pendingReplies.push(reply)
-
-        replyCooldown[user] = now()
-
-        res.json({ ok: true })
-    } catch (e) {
-        res.status(500).json({ error: "server error" })
-    }
 })
 
 /* =========================
@@ -201,21 +122,83 @@ app.post("/admin/login", (req, res) => {
 })
 
 /* =========================
-   ADMIN THREAD VIEW
+   CREATE THREAD
 ========================= */
 
-app.get("/admin/threads", (req, res) => {
-    if (!requireAdmin(req, res)) return
-    res.json(threads)
+app.post("/admin/thread", upload.single("media"), (req, res) => {
+    if (!isAdmin(req)) return res.status(403).json({ error: "no" })
+
+    const thread = {
+        id: crypto.randomUUID(),
+        text: req.body.text || "",
+        media: req.file ? "/uploads/" + req.file.filename : "",
+        time: new Date().toISOString(),
+        replies: [],
+        pendingReplies: []
+    }
+
+    threads.unshift(thread)
+    trimThreads()
+
+    res.json(thread)
 })
 
-app.get("/admin/thread/:id", (req, res) => {
+/* =========================
+   USER REPLY
+========================= */
+
+app.post("/threads/:id/reply", upload.single("media"), (req, res) => {
+    const user = ip(req)
+
+    if (!replyCooldown[user] || now() - replyCooldown[user] < 10000) {
+        return res.status(429).json({ error: "slow" })
+    }
+
+    const t = findThread(req.params.id)
+    if (!t) return res.status(404).json({ error: "not found" })
+
+    const reply = {
+        id: crypto.randomUUID(),
+        text: req.body.text || "",
+        media: req.file ? "/uploads/" + req.file.filename : "",
+        time: new Date().toISOString()
+    }
+
+    t.pendingReplies.push(reply)
+    replyCooldown[user] = now()
+
+    res.json({ ok: true })
+})
+
+/* =========================
+   ADMIN THREAD ACTIONS (FIXED)
+========================= */
+
+app.delete("/admin/thread/:id", (req, res) => {
+    if (!requireAdmin(req, res)) return
+
+    threads = threads.filter(t => t.id !== req.params.id)
+    res.json({ ok: true })
+})
+
+app.post("/admin/thread/:id/pin", (req, res) => {
     if (!requireAdmin(req, res)) return
 
     const t = findThread(req.params.id)
     if (!t) return res.status(404).json({ error: "not found" })
 
-    res.json(t)
+    threads = [t, ...threads.filter(x => x.id !== t.id)]
+    res.json({ ok: true })
+})
+
+app.post("/admin/thread/:id/bottom", (req, res) => {
+    if (!requireAdmin(req, res)) return
+
+    const t = findThread(req.params.id)
+    if (!t) return res.status(404).json({ error: "not found" })
+
+    threads = [...threads.filter(x => x.id !== t.id), t]
+    res.json({ ok: true })
 })
 
 /* =========================
